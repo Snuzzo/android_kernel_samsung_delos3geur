@@ -1,4 +1,4 @@
-/* Copyright (c) 2008-2012, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2008-2012, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -151,6 +151,10 @@ struct lvds_panel_info {
 struct msm_panel_info {
 	__u32 xres;
 	__u32 yres;
+#if defined(CONFIG_MACH_ARUBASLIM_OPEN)
+	__u32 height;
+	__u32 width;
+#endif
 	__u32 bpp;
 	__u32 mode2_xres;
 	__u32 mode2_yres;
@@ -195,6 +199,10 @@ struct msm_fb_panel_data {
 	int (*power_ctrl) (boolean enable);
 	struct platform_device *next;
 	int (*clk_func) (int enable);
+
+#if defined(CONFIG_FB_MSM_MIPI_CMD_PANEL_AVOID_MOSAIC) || defined(CONFIG_MACH_KYLEPLUS_OPEN) || defined(CONFIG_MACH_INFINITE_DUOS_CTC)
+	void (*unblank) (struct platform_device *pdev);
+#endif	
 };
 
 /*===========================================================================

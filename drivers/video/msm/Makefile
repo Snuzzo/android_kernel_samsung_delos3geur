@@ -81,11 +81,19 @@ obj-$(CONFIG_FB_MSM_MIPI_DSI_NOVATEK) += mipi_novatek.o
 obj-$(CONFIG_FB_MSM_MIPI_DSI_ORISE) += mipi_orise.o
 obj-$(CONFIG_FB_MSM_MIPI_DSI_RENESAS) += mipi_renesas.o
 obj-$(CONFIG_FB_MSM_MIPI_DSI_TRULY) += mipi_truly.o
-obj-$(CONFIG_FB_MSM_MIPI_DSI_NT35510) += mipi_NT35510.o
-obj-$(CONFIG_FB_MSM_MIPI_DSI_HX8389B) += mipi_hx8389b.o
+obj-$(CONFIG_FB_MSM_MIPI_DSI_NT35510) += mipi_NT35510.o lcdc_backlight_ic.o
 obj-$(CONFIG_FB_MSM_MIPI_DSI_NT35516) += mipi_truly_tft540960_1_e.o
-obj-$(CONFIG_FB_MSM_MIPI_DSI_NT35590) += mipi_NT35590.o
 obj-$(CONFIG_FB_MSM_MIPI_DSI_SIMULATOR) += mipi_simulator.o
+
+# Samsung
+obj-$(CONFIG_FB_MSM_MIPI_DSI_HX8357) += mipi_HX8357.o lcdc_backlight_ic.o
+obj-$(CONFIG_FB_MSM_LCDC_ILI9486L) += lcdc_ILI9486L_hvga.o lcdc_backlight.o
+
+ifeq ($(CONFIG_MACH_BAFFIN_DUOS_CTC),y)
+obj-$(CONFIG_FB_MSM_MIPI_DSI_HX8369B) += mipi_HX8369B_baffinduos.o lcdc_backlight_ic.o
+else
+obj-$(CONFIG_FB_MSM_MIPI_DSI_HX8369B) += mipi_HX8369B.o lcdc_backlight_ic.o
+endif
 
 # MIPI Bridge
 obj-$(CONFIG_FB_MSM_MIPI_DSI_TC358764_DSI2LVDS) += mipi_tc358764_dsi2lvds.o
@@ -127,9 +135,7 @@ obj-y += mipi_novatek_video_qhd_pt.o mipi_novatek_cmd_qhd_pt.o
 obj-y += mipi_orise_video_720p_pt.o mipi_orise_cmd_720p_pt.o
 obj-y += mipi_renesas_video_fwvga_pt.o mipi_renesas_cmd_fwvga_pt.o
 obj-y += mipi_NT35510_video_wvga_pt.o mipi_NT35510_cmd_wvga_pt.o
-obj-y += mipi_hx8389b_video_qhd_pt.o
 obj-y += mipi_truly_tft540960_1_e_video_qhd_pt.o mipi_truly_tft540960_1_e_cmd_qhd_pt.o
-obj-y += mipi_NT35590_cmd_720p_pt.o mipi_NT35590_video_720p_pt.o
 obj-y += mipi_chimei_wxga_pt.o
 obj-y += mipi_chimei_wuxga.o
 obj-y += mipi_truly_video_wvga_pt.o
@@ -147,13 +153,15 @@ obj-$(CONFIG_FB_MSM_MIPI_RENESAS_VIDEO_FWVGA_PT) += mipi_renesas_video_fwvga_pt.
 obj-$(CONFIG_FB_MSM_MIPI_TRULY_VIDEO_WVGA_PT) += mipi_truly_video_wvga_pt.o
 obj-$(CONFIG_FB_MSM_MIPI_NT35510_CMD_WVGA_PT) += mipi_NT35510_cmd_wvga_pt.o
 obj-$(CONFIG_FB_MSM_MIPI_NT35510_VIDEO_WVGA_PT) += mipi_NT35510_video_wvga_pt.o
-obj-$(CONFIG_FB_MSM_MIPI_HX8389B_VIDEO_QHD_PT) += mipi_hx8389b_video_qhd_pt.o
 obj-$(CONFIG_FB_MSM_MIPI_NT35516_CMD_QHD_PT) += mipi_truly_tft540960_1_e_cmd_qhd_pt.o
 obj-$(CONFIG_FB_MSM_MIPI_NT35516_VIDEO_QHD_PT) += mipi_truly_tft540960_1_e_video_qhd_pt.o
-obj-$(CONFIG_FB_MSM_MIPI_NT35590_CMD_720P_PT) += mipi_NT35590_cmd_720p_pt.o mipi_NT35590_video_720p_pt.o
 obj-$(CONFIG_FB_MSM_MIPI_SIMULATOR_VIDEO) += mipi_simulator_video.o
 obj-$(CONFIG_FB_MSM_MIPI_CHIMEI_WXGA) += mipi_chimei_wxga_pt.o
 obj-$(CONFIG_FB_MSM_MIPI_CHIMEI_WUXGA) += mipi_chimei_wuxga.o
+
+# Samsung
+obj-$(CONFIG_FB_MSM_MIPI_HX8369B_WVGA_PT) += mipi_HX8369B_video_wvga_pt.o
+obj-$(CONFIG_FB_MSM_MIPI_HX8357_CMD_SMD_HVGA_PT) += mipi_HX8357_cmd_smd_hvga_pt.o
 endif
 
 obj-$(CONFIG_FB_MSM_LCDC_PANEL) += lcdc_panel.o

@@ -294,6 +294,7 @@ static ssize_t print_switch_state(struct switch_dev *sdev, char *buf)
 
 static inline enum chg_type usb_get_chg_type(struct usb_info *ui)
 {
+#if defined(CONFIG_MACH_ROY)
 	if ((readl_relaxed(USB_PORTSC) & PORTSC_LS) == PORTSC_LS) {
 		return USB_CHG_TYPE__WALLCHARGER;
 	} else if (ui->pdata->prop_chg) {
@@ -306,6 +307,50 @@ static inline enum chg_type usb_get_chg_type(struct usb_info *ui)
 	} else {
 		return USB_CHG_TYPE__SDP;
 	}
+#else	
+#ifdef CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE
+	if (ui->pdata->get_usb_chg_type )
+	{
+		if (ui->pdata->get_usb_chg_type() == USB_CHG_TYPE__WALLCHARGER)
+		{
+			printk("%s : return USB_CHG_TYPE__WALLCHARGER\n",__func__);
+			return USB_CHG_TYPE__WALLCHARGER;
+		}
+		else{
+			printk("%s : return USB_CHG_TYPE__SDP\n",__func__);
+			return USB_CHG_TYPE__SDP;
+		}
+	}
+	else
+	{
+		if ((readl_relaxed(USB_PORTSC) & PORTSC_LS) == PORTSC_LS) {
+			return USB_CHG_TYPE__WALLCHARGER;
+		} else if (ui->pdata->prop_chg) {
+			if (ui->gadget.speed == USB_SPEED_LOW ||
+				ui->gadget.speed == USB_SPEED_FULL ||
+					ui->gadget.speed == USB_SPEED_HIGH)
+				return USB_CHG_TYPE__SDP;
+			else
+				return USB_CHG_TYPE__INVALID;
+		} else {
+			return USB_CHG_TYPE__SDP;
+		}
+	}
+#else
+	if ((readl_relaxed(USB_PORTSC) & PORTSC_LS) == PORTSC_LS) {
+		return USB_CHG_TYPE__WALLCHARGER;
+	} else if (ui->pdata->prop_chg) {
+		if (ui->gadget.speed == USB_SPEED_LOW ||
+			ui->gadget.speed == USB_SPEED_FULL ||
+			ui->gadget.speed == USB_SPEED_HIGH)
+			return USB_CHG_TYPE__SDP;
+		else
+			return USB_CHG_TYPE__INVALID;
+	} else {
+		return USB_CHG_TYPE__SDP;
+	}
+#endif
+#endif
 }
 
 #define USB_WALLCHARGER_CHG_CURRENT 1800
@@ -332,10 +377,31 @@ static int usb_get_max_power(struct usb_info *ui)
 	if (temp == USB_CHG_TYPE__INVALID)
 		return -ENODEV;
 
+#if defined(CONFIG_MACH_ROY)
+#if defined(CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE)
+	if (temp == USB_CHG_TYPE__WALLCHARGER)
+		return USB_WALLCHARGER_CHG_CURRENT;
+#else
 	if (temp == USB_CHG_TYPE__WALLCHARGER && !ui->proprietary_chg)
 		return USB_WALLCHARGER_CHG_CURRENT;
 	else if (ui->pdata->prop_chg)
 		return USB_PROPRIETARY_CHG_CURRENT;
+#endif
+#else
+#if defined(CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE)
+	if (temp == USB_CHG_TYPE__WALLCHARGER && !ui->proprietary_chg)
+		return USB_WALLCHARGER_CHG_CURRENT;
+	else
+		return USB_PROPRIETARY_CHG_CURRENT;
+#else
+	if (temp == USB_CHG_TYPE__WALLCHARGER && !ui->proprietary_chg)
+		return USB_WALLCHARGER_CHG_CURRENT;
+	else if (ui->pdata->prop_chg)
+		return USB_PROPRIETARY_CHG_CURRENT;
+#endif
+#endif
+
+
 
 	if (suspended || !configured)
 		return 0;
@@ -402,6 +468,9 @@ static void usb_phy_stuck_recover(struct work_struct *w)
 		mod_timer(&otg->id_timer, jiffies +
 				 msecs_to_jiffies(OTG_ID_POLL_MS));
 #endif
+#ifdef CONFIG_MACH_DELOS_DUOS_CTC
+		printk("%s : !\n",__func__);
+#endif
 		msm72k_pullup_internal(&ui->gadget, 1);
 	}
 	enable_irq(otg->irq);
@@ -449,8 +518,19 @@ static void usb_chg_detect(struct work_struct *w)
 		return;
 	}
 	if (temp == USB_CHG_TYPE__INVALID) {
+#if defined(CONFIG_MACH_ROY)
+#if defined(CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE)
+		temp = USB_CHG_TYPE__SDP;
+		ui->proprietary_chg = false;
+#else
 		temp = USB_CHG_TYPE__WALLCHARGER;
 		ui->proprietary_chg = true;
+#endif
+#else
+		printk("%s fsa can't recognize device type, so we forcely regard it as USB [KBJ] \n",__func__);
+		temp = USB_CHG_TYPE__WALLCHARGER;
+		ui->proprietary_chg = true;
+#endif		
 	}
 	spin_unlock_irqrestore(&ui->lock, flags);
 
@@ -1259,9 +1339,6 @@ static void flush_endpoint_sw(struct msm_endpoint *ept)
 	struct msm_request *req, *next_req = NULL;
 	unsigned long flags;
 
-	if (!ept->req)
-		return;
-
 	/* inactive endpoints have nothing to do here */
 	if (ept->ep.maxpacket == 0)
 		return;
@@ -1596,7 +1673,9 @@ static void usb_do_work(struct work_struct *w)
 
 				if (!atomic_read(&ui->softconnect))
 					break;
-
+#ifdef CONFIG_MACH_DELOS_DUOS_CTC
+				printk("%s : USB_STATE_IDLE !\n",__func__);
+#endif
 				msm72k_pullup_internal(&ui->gadget, 1);
 
 				if (!ui->gadget.is_a_peripheral)
@@ -1645,6 +1724,9 @@ static void usb_do_work(struct work_struct *w)
 				ui->gadget.b_hnp_enable = 0;
 				ui->hnp_avail = 0;
 #endif
+#ifdef CONFIG_MACH_DELOS_DUOS_CTC
+				printk("%s : USB_FLAG_VBUS_OFFLINE !\n",__func__);
+#endif
 				msm72k_pullup_internal(&ui->gadget, 0);
 				spin_unlock_irqrestore(&ui->lock, iflags);
 
@@ -1669,7 +1751,7 @@ static void usb_do_work(struct work_struct *w)
 					/* Ensure that above STOREs are
 					 * completed before enabling
 					 * interrupts */
-					wmb();
+					wmb();	
 					free_irq(ui->irq, ui);
 					ui->irq = 0;
 				}
@@ -1721,8 +1803,14 @@ static void usb_do_work(struct work_struct *w)
 			if (flags & USB_FLAG_RESET) {
 				dev_dbg(&ui->pdev->dev,
 					"msm72k_udc: ONLINE -> RESET\n");
+#ifdef CONFIG_MACH_DELOS_DUOS_CTC
+				printk("%s : USB_FLAG_RESET !\n",__func__);
+#endif
 				msm72k_pullup_internal(&ui->gadget, 0);
 				usb_reset(ui);
+#ifdef CONFIG_MACH_DELOS_DUOS_CTC
+				printk("%s : USB_FLAG_RESET !\n",__func__);
+#endif
 				msm72k_pullup_internal(&ui->gadget, 1);
 				dev_dbg(&ui->pdev->dev,
 					"msm72k_udc: RESET -> ONLINE\n");
@@ -1761,6 +1849,9 @@ static void usb_do_work(struct work_struct *w)
 
 				if (!atomic_read(&ui->softconnect))
 					break;
+#ifdef CONFIG_MACH_DELOS_DUOS_CTC
+				printk("%s : USB_FLAG_VBUS_ONLINE !\n",__func__);
+#endif
 				msm72k_pullup_internal(&ui->gadget, 1);
 
 				if (!ui->gadget.is_a_peripheral)
@@ -2137,13 +2228,13 @@ static void usb_debugfs_init(struct usb_info *ui)
 		return;
 
 	debugfs_create_file("status", 0444, dent, ui, &debug_stat_ops);
-	debugfs_create_file("reset", 0222, dent, ui, &debug_reset_ops);
-	debugfs_create_file("cycle", 0222, dent, ui, &debug_cycle_ops);
-	debugfs_create_file("release_wlocks", 0666, dent, ui,
+	debugfs_create_file("reset", 0220, dent, ui, &debug_reset_ops);
+	debugfs_create_file("cycle", 0220, dent, ui, &debug_cycle_ops);
+	debugfs_create_file("release_wlocks", 0664, dent, ui,
 						&debug_wlocks_ops);
-	debugfs_create_file("prime_fail_countt", 0666, dent, ui,
+	debugfs_create_file("prime_fail_countt", 0664, dent, ui,
 						&prime_fail_ops);
-	debugfs_create_file("proprietary_chg", 0666, dent, ui,
+	debugfs_create_file("proprietary_chg", 0664, dent, ui,
 						&debug_prop_chg_ops);
 }
 #else
@@ -2209,9 +2300,6 @@ msm72k_queue(struct usb_ep *_ep, struct usb_request *req, gfp_t gfp_flags)
 	struct msm_endpoint *ep = to_msm_endpoint(_ep);
 	struct usb_info *ui = ep->ui;
 
-	if (!atomic_read(&ui->softconnect))
-		return -ENODEV;
-
 	if (ep == &ui->ep0in) {
 		struct msm_request *r = to_msm_request(req);
 		if (!req->length)
@@ -2238,13 +2326,6 @@ static int msm72k_dequeue(struct usb_ep *_ep, struct usb_request *_req)
 
 	struct msm_request *temp_req;
 	unsigned long flags;
-
-	if (ep->num == 0) {
-		/* Flush both out and in control endpoints */
-		flush_endpoint(&ui->ep0out);
-		flush_endpoint(&ui->ep0in);
-		return 0;
-	}
 
 	if (!(ui && req && ep->req))
 		return -EINVAL;
@@ -2433,9 +2514,13 @@ static int msm72k_pullup_internal(struct usb_gadget *_gadget, int is_active)
 	if (is_active) {
 		spin_lock_irqsave(&ui->lock, flags);
 		if (is_usb_online(ui) && ui->driver)
+		{
+			printk("%s: is_active = %d , pullup_internal is changed as high!!  \n",__func__ , is_active );
 			writel(readl(USB_USBCMD) | USBCMD_RS, USB_USBCMD);
+		}
 		spin_unlock_irqrestore(&ui->lock, flags);
 	} else {
+		printk("%s: is_active = %d , pullup_internal is changed as low!!  \n",__func__ , is_active );
 		writel(readl(USB_USBCMD) & ~USBCMD_RS, USB_USBCMD);
 		/* S/W workaround, Issue#1 */
 		usb_phy_io_write(ui->xceiv, 0x48, 0x04);
@@ -2459,10 +2544,13 @@ static int msm72k_pullup(struct usb_gadget *_gadget, int is_active)
 	if (ui->usb_state == USB_STATE_NOTATTACHED || ui->driver == NULL ||
 		atomic_read(&otg->chg_type) == USB_CHG_TYPE__WALLCHARGER) {
 		spin_unlock_irqrestore(&ui->lock, flags);
+		printk("%s: ui->usb_state = %d. \n",__func__ , ui->usb_state );
 		return 0;
 	}
 	spin_unlock_irqrestore(&ui->lock, flags);
-
+#ifdef CONFIG_MACH_DELOS_DUOS_CTC
+	printk("%s : is_active=%d !\n",__func__,is_active);
+#endif
 	msm72k_pullup_internal(_gadget, is_active);
 
 	if (is_active && !ui->gadget.is_a_peripheral)
@@ -2893,7 +2981,9 @@ static int msm72k_gadget_stop(struct usb_gadget_driver *driver)
 		return -ENODEV;
 	if (!driver || driver != dev->driver || !driver->unbind)
 		return -EINVAL;
-
+#ifdef CONFIG_MACH_DELOS_DUOS_CTC
+	printk("%s : gadget_stop !\n",__func__);
+#endif
 	msm72k_pullup_internal(&dev->gadget, 0);
 	if (dev->irq) {
 		free_irq(dev->irq, dev);

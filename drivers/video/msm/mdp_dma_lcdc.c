@@ -1,4 +1,4 @@
-/* Copyright (c) 2008-2009, 2012 The Linux Foundation. All rights reserved.
+/* Copyright (c) 2008-2009, 2012 Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -143,7 +143,7 @@ int mdp_lcdc_on(struct platform_device *pdev)
 
 	buf += calc_fb_offset(mfd, fbi, bpp);
 
-	dma2_cfg_reg = DMA_PACK_ALIGN_LSB | DMA_OUT_SEL_LCDC;
+	dma2_cfg_reg = DMA_PACK_ALIGN_LSB | DMA_DITHER_EN | DMA_OUT_SEL_LCDC;
 
 	if (mfd->fb_imgType == MDP_BGR_565)
 		dma2_cfg_reg |= DMA_PACK_PATTERN_BGR;
@@ -270,8 +270,8 @@ int mdp_lcdc_on(struct platform_device *pdev)
 
 	lcdc_underflow_clr |= 0x80000000;	/* enable recovery */
 #else
-	hsync_polarity = 0;
-	vsync_polarity = 0;
+	hsync_polarity = 1;
+	vsync_polarity = 1;
 #endif
 	data_en_polarity = 0;
 
@@ -311,7 +311,9 @@ int mdp_lcdc_on(struct platform_device *pdev)
 		MDP_OUTP(MDP_BASE + timer_base + 0x38, active_v_end);
 	}
 
+#if !defined(CONFIG_MACH_NEVIS3G_REV03)
 	ret = panel_next_on(pdev);
+#endif
 	if (ret == 0) {
 		/* enable LCDC block */
 		MDP_OUTP(MDP_BASE + timer_base, 1);
@@ -334,6 +336,10 @@ int mdp_lcdc_on(struct platform_device *pdev)
 		vsync_cntrl.sysfs_created = 1;
 	}
 	mdp_histogram_ctrl_all(TRUE);
+
+#if defined(CONFIG_MACH_NEVIS3G_REV03)
+	ret = panel_next_on(pdev);
+#endif
 
 	return ret;
 }

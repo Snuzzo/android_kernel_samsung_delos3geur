@@ -1,4 +1,4 @@
-/* Copyright (c) 2008-2012, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2008-2012, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -187,8 +187,6 @@ struct msm_fb_data_type {
 	u32 writeback_state;
 	bool writeback_active_cnt;
 	int cont_splash_done;
-	void *copy_splash_buf;
-	unsigned char *copy_splash_phys;
 };
 
 struct dentry *msm_fb_get_debugfs_root(void);
@@ -220,6 +218,9 @@ int msm_fb_check_frame_rate(struct msm_fb_data_type *mfd,
 
 #ifdef CONFIG_FB_MSM_LOGO
 #define INIT_IMAGE_FILE "/initlogo.rle"
+#if defined(CONFIG_VARIANT_SECOND_BOOTIMAGE)
+#define INIT_IMAGE_VARIANT_FILE "/initlogo_swa.rle"
+#endif
 int load_565rle_image(char *filename, bool bf_supported);
 #endif
 

@@ -1,7 +1,7 @@
 /*
    BlueZ - Bluetooth protocol stack for Linux
    Copyright (C) 2000-2001 Qualcomm Incorporated
-   Copyright (c) 2011, The Linux Foundation. All rights reserved.
+   Copyright (c) 2011, Code Aurora Forum. All rights reserved.
 
    Written 2000,2001 by Maxim Krasnyansky <maxk@qualcomm.com>
 
@@ -23,6 +23,9 @@
    SOFTWARE IS DISCLAIMED.
 */
 
+#ifdef CONFIG_BT_MGMT
+#include "sco_mgmt.h"
+#else
 #ifndef __SCO_H
 #define __SCO_H
 
@@ -81,3 +84,4 @@ struct sco_pinfo {
 };
 
 #endif /* __SCO_H */
+#endif /* CONFIG_BT_MGMT */

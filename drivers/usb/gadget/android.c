@@ -64,7 +64,11 @@
 #include "f_acm.c"
 #include "f_adb.c"
 #include "f_ccid.c"
+#ifdef CONFIG_USB_ANDROID_SAMSUNG_MTP
+#include "f_mtp_samsung.c"
+#else
 #include "f_mtp.c"
+#endif
 #include "f_accessory.c"
 #define USB_ETH_RNDIS y
 #include "f_rndis.c"
@@ -82,6 +86,10 @@ MODULE_VERSION("1.0");
 
 static const char longname[] = "Gadget Android";
 
+#ifdef CONFIG_USB_DUN_SUPPORT
+extern void modem_register(void);
+extern void modem_unregister(void);
+#endif
 /* Default vendor and product IDs, overridden by userspace */
 #define VENDOR_ID		0x18D1
 #define PRODUCT_ID		0x0001
@@ -132,6 +140,10 @@ struct android_dev {
 
 	bool connected;
 	bool sw_connected;
+#if defined(CONFIG_USB_DCHUN_MAC)
+	bool mac_connected;
+#endif
+///////////////////////////////////////
 	char pm_qos[5];
 	struct pm_qos_request pm_qos_req_dma;
 	struct work_struct work;
@@ -141,6 +153,28 @@ static struct class *android_class;
 static struct android_dev *_android_dev;
 static int android_bind_config(struct usb_configuration *c);
 static void android_unbind_config(struct usb_configuration *c);
+
+#if defined(CONFIG_USB_DCHUN_MAC)
+extern int usb_state_flag;
+int usb_mac_state_set_flag=0;
+//ohj
+void set_mac_connected(bool mac_connected) {
+	struct android_dev *dev = _android_dev;
+	if(_android_dev) {
+		if( !mac_connected )
+		{
+			dev->mac_connected = mac_connected;
+			usb_mac_state_set_flag = 0;
+		}
+		else if( usb_state_flag && !usb_mac_state_set_flag )
+		{
+			dev->mac_connected = mac_connected;
+			printk("%s : mac_connected=%d\n" , __func__ , mac_connected );
+			schedule_work(&dev->work);
+		}
+	}
+}
+#endif
 
 /* string IDs are assigned dynamically */
 #define STRING_MANUFACTURER_IDX		0
@@ -231,6 +265,9 @@ static void android_work(struct work_struct *data)
 	char *disconnected[2] = { "USB_STATE=DISCONNECTED", NULL };
 	char *connected[2]    = { "USB_STATE=CONNECTED", NULL };
 	char *configured[2]   = { "USB_STATE=CONFIGURED", NULL };
+#if defined(CONFIG_USB_DCHUN_MAC)
+	char *mac_configured[2]   = { "USB_STATE=MAC_RECOGNIZED", NULL };
+#endif
 	char **uevent_envp = NULL;
 	static enum android_device_state last_uevent, next_state;
 	unsigned long flags;
@@ -248,6 +285,14 @@ static void android_work(struct work_struct *data)
 		else if (!dev->connected || !strncmp(dev->pm_qos, "low", 3))
 			pm_qos_vote = 0;
 	}
+#if defined(CONFIG_USB_DCHUN_MAC)
+	if (dev->mac_connected && !usb_mac_state_set_flag && cdev->config )
+	{
+		uevent_envp = mac_configured;
+		printk("%s : mac_configured=%s\n" , __func__ , mac_configured );
+		usb_mac_state_set_flag = 1;
+	}
+#endif
 	dev->sw_connected = dev->connected;
 	spin_unlock_irqrestore(&cdev->lock, flags);
 
@@ -261,6 +306,14 @@ static void android_work(struct work_struct *data)
 		 * Check if we missed sending out a DISCONNECT uevent. This can
 		 * happen if host PC resets and configures device really quick.
 		 */
+#if defined(CONFIG_USB_DCHUN_MAC)
+		if (uevent_envp == mac_configured)
+		{
+			kobject_uevent_env(&dev->dev->kobj, KOBJ_CHANGE, uevent_envp);
+			pr_info("%s: sent uevent %s\n", __func__, uevent_envp[0]);
+		}
+		else{
+#endif
 		if (((uevent_envp == connected) &&
 		      (last_uevent != USB_DISCONNECTED)) ||
 		    ((uevent_envp == configured) &&
@@ -280,6 +333,9 @@ static void android_work(struct work_struct *data)
 		kobject_uevent_env(&dev->dev->kobj, KOBJ_CHANGE, uevent_envp);
 		last_uevent = next_state;
 		pr_info("%s: sent uevent %s\n", __func__, uevent_envp[0]);
+#if defined(CONFIG_USB_DCHUN_MAC)
+		}
+#endif
 	} else {
 		pr_info("%s: did not send uevent (%d %d %p)\n", __func__,
 			 dev->connected, dev->sw_connected, cdev->config);
@@ -294,6 +350,7 @@ static int android_enable(struct android_dev *dev)
 	if (WARN_ON(!dev->disable_depth))
 		return err;
 
+	printk("%s: current disable_depth = %d.\n",__func__,dev->disable_depth);
 	if (--dev->disable_depth == 0) {
 		err = usb_add_config(cdev, &android_config_driver,
 					android_bind_config);
@@ -314,6 +371,7 @@ static void android_disable(struct android_dev *dev)
 {
 	struct usb_composite_dev *cdev = dev->cdev;
 
+	printk("%s: current disable_depth = %d.\n",__func__,dev->disable_depth);
 	if (dev->disable_depth++ == 0) {
 		usb_gadget_disconnect(cdev->gadget);
 		/* Cancel pending control requests */
@@ -1090,29 +1148,26 @@ struct mass_storage_function_config {
 static int mass_storage_function_init(struct android_usb_function *f,
 					struct usb_composite_dev *cdev)
 {
-	struct android_dev *dev = _android_dev;
-	struct mass_storage_function_config *config;
-	struct fsg_common *common;
-	int err;
-	int i;
-	const char *name[2];
-
-	config = kzalloc(sizeof(struct mass_storage_function_config),
+    /*13.1.30 daesu.jeong - fix warning code del->int i;, struct android_dev *dev = _android_dev;, const char *name[2];*/
+    struct mass_storage_function_config *config;
+    struct fsg_common *common;
+    int err;
+    config = kzalloc(sizeof(struct mass_storage_function_config),
 								GFP_KERNEL);
 	if (!config)
 		return -ENOMEM;
 
+#ifdef CONFIG_USB_MASS_STORAGE_LUN_NUMBER_2
+	config->fsg.nluns = 2;
+#else
 	config->fsg.nluns = 1;
-	name[0] = "lun";
-	if (dev->pdata->cdrom) {
-		config->fsg.nluns = 2;
-		config->fsg.luns[1].cdrom = 1;
-		config->fsg.luns[1].ro = 1;
-		config->fsg.luns[1].removable = 0;
-		name[1] = "lun0";
-	}
-
+#endif
 	config->fsg.luns[0].removable = 1;
+#ifdef CONFIG_USB_MASS_STORAGE_LUN_NUMBER_2
+	config->fsg.luns[1].removable = 1;
+#endif
+
+	config->fsg.luns[0].cdrom = 1;
 
 	common = fsg_common_init(NULL, cdev, &config->fsg);
 	if (IS_ERR(common)) {
@@ -1120,24 +1175,27 @@ static int mass_storage_function_init(struct android_usb_function *f,
 		return PTR_ERR(common);
 	}
 
-	for (i = 0; i < config->fsg.nluns; i++) {
 		err = sysfs_create_link(&f->dev->kobj,
-					&common->luns[i].dev.kobj,
-					name[i]);
-		if (err)
-			goto error;
+				&common->luns[0].dev.kobj,
+				"lun");
+	if (err) {
+		fsg_common_release(&common->ref);
+		kfree(config);
+		return err;
 	}
+#ifdef CONFIG_USB_MASS_STORAGE_LUN_NUMBER_2
+	err = sysfs_create_link(&f->dev->kobj,
+				&common->luns[1].dev.kobj,
+				"lun_ex");
+	if (err) {
+		kfree(config);
+		return err;
+	}
+#endif
 
 	config->common = common;
 	f->config = config;
 	return 0;
-error:
-	for (; i > 0 ; i--)
-		sysfs_remove_link(&f->dev->kobj, name[i-1]);
-
-	fsg_common_release(&common->ref);
-	kfree(config);
-	return err;
 }
 
 static void mass_storage_function_cleanup(struct android_usb_function *f)
@@ -1545,6 +1603,7 @@ static ssize_t enable_store(struct device *pdev, struct device_attribute *attr,
 	mutex_lock(&dev->mutex);
 
 	sscanf(buff, "%d", &enabled);
+	printk(KERN_DEBUG "usb: %s enabled:%d dev->enabled:%d \n", __func__, enabled , dev->enabled);
 	if (enabled && !dev->enabled) {
 		/*
 		 * Update values in composite driver's copy of
@@ -1554,6 +1613,20 @@ static ssize_t enable_store(struct device *pdev, struct device_attribute *attr,
 		cdev->desc.idProduct = device_desc.idProduct;
 		cdev->desc.bcdDevice = device_desc.bcdDevice;
 		cdev->desc.bDeviceClass = device_desc.bDeviceClass;
+#ifdef CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE
+		list_for_each_entry(f, &dev->enabled_functions, enabled_list) {
+			printk(KERN_DEBUG "usb: %s f:%s\n", __func__, f->name);
+			if (!strcmp(f->name, "acm")) {
+				printk(KERN_DEBUG "usb: acm is enabled. (bcdDevice=0x400)\n");
+				/* Samsung KIES needs fixed bcdDevice number */
+				cdev->desc.bcdDevice = cpu_to_le16(0x0400);
+			}
+		}
+		strncpy(manufacturer_string, "SAMSUNG",
+				sizeof(manufacturer_string) - 1);
+		strncpy(product_string, "SAMSUNG_Android",
+				sizeof(product_string) - 1);
+#endif		
 		cdev->desc.bDeviceSubClass = device_desc.bDeviceSubClass;
 		cdev->desc.bDeviceProtocol = device_desc.bDeviceProtocol;
 
@@ -2005,6 +2078,9 @@ static int __init init(void)
 	composite_driver.disconnect = android_disconnect;
 
 	ret = platform_driver_register(&android_platform_driver);
+        #ifdef CONFIG_USB_DUN_SUPPORT
+	modem_register();
+        #endif
 	if (ret) {
 		pr_err("%s(): Failed to register android"
 				 "platform driver\n", __func__);
@@ -2017,6 +2093,9 @@ module_init(init);
 
 static void __exit cleanup(void)
 {
+        #ifdef CONFIG_USB_DUN_SUPPORT
+        modem_unregister();
+        #endif
 	platform_driver_unregister(&android_platform_driver);
 	kfree(_android_dev);
 	_android_dev = NULL;

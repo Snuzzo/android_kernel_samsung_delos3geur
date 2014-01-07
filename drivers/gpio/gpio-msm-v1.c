@@ -1,7 +1,7 @@
 /* linux/arch/arm/mach-msm/gpio.c
  *
  * Copyright (C) 2007 Google, Inc.
- * Copyright (c) 2009-2012, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2009-2012, Code Aurora Forum. All rights reserved.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -663,6 +663,12 @@ void msm_gpio_exit_sleep(void)
 
 int gpio_tlmm_config(unsigned config, unsigned disable)
 {
+#if 0 /* use for only debugging mode */
+	printk("%s: pin=%d func=%d dir=%d pull=%d drvstr=%d\n", __func__, 
+			       GPIO_PIN(config), GPIO_FUNC(config),
+			       GPIO_DIR(config), GPIO_PULL(config),
+			       GPIO_DRVSTR(config));
+#endif
 	return msm_proc_comm(PCOM_RPC_GPIO_TLMM_CONFIG_EX, &config, &disable);
 }
 EXPORT_SYMBOL(gpio_tlmm_config);

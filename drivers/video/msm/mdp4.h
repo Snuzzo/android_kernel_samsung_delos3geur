@@ -1,4 +1,4 @@
-/* Copyright (c) 2009-2012, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2009-2012, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -775,7 +775,7 @@ static inline void mdp4_dsi_cmd_del_timer(void)
 void mdp4_dsi_cmd_del_timer(void);
 #endif
 #else  /* CONFIG_FB_MSM_MIPI_DSI */
-
+#ifdef CONFIG_FB_MSM_MDP40
 static inline int mdp4_dsi_cmd_on(struct platform_device *pdev)
 {
 	return 0;
@@ -826,7 +826,6 @@ static inline void mdp4_overlay_dsi_video_start(void)
 {
 	/* empty */
 }
-#ifdef CONFIG_FB_MSM_MDP40
 static inline void mdp_dsi_cmd_overlay_suspend(struct msm_fb_data_type *mfd)
 {
 	/* empty */

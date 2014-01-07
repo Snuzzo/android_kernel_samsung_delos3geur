@@ -1,4 +1,4 @@
-/* Copyright (c) 2012, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -59,7 +59,7 @@ static int mipi_video_nt35510_wvga_pt_init(void)
 	delayed from VSYNC active edge */
 	pinfo.lcdc.hsync_skew = 0;
 	pinfo.clk_rate = 499000000;
-	pinfo.bl_max = 255;
+	pinfo.bl_max = 100; /*16; CHECK THIS!!!*/
 	pinfo.bl_min = 1;
 	pinfo.fb_num = 2;
 
@@ -92,6 +92,7 @@ static int mipi_video_nt35510_wvga_pt_init(void)
 	pinfo.mipi.frame_rate = 60; /* FIXME */
 
 	pinfo.mipi.dsi_phy_db = &dsi_video_mode_phy_db;
+	pinfo.mipi.dlane_swap = 0x01;
 	/* append EOT at the end of data burst */
 	pinfo.mipi.tx_eot_append = 0x01;
 

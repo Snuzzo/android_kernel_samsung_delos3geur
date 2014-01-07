@@ -1,6 +1,6 @@
 /*
  * f_audio.c -- USB Audio class function driver
- *
+  *
  * Copyright (c) 2012, The Linux Foundation. All rights reserved.
  * Copyright (C) 2008 Bryan Wu <cooloney@kernel.org>
  * Copyright (C) 2008 Analog Devices, Inc
@@ -70,21 +70,21 @@ static int generic_get_cmd(struct usb_audio_control *con, u8 cmd);
 #define MICROPHONE_OUTPUT_TERMINAL_ID	2
 
 
- /*
-  * We have two interfaces- AudioControl and AudioStreaming
-  */
+/*
+ * We have two interfaces- AudioControl and AudioStreaming
+ */
 
 #define F_AUDIO_INTERFACE_MICROPHONE	2
 #define F_AUDIO_INTERFACE_SPEAKER	3
-#define F_AUDIO_NUM_INTERFACES		2
+#define F_AUDIO_NUM_INTERFACES	2
 
- /* B.3.1  Standard AC Interface Descriptor */
+/* B.3.1  Standard AC Interface Descriptor */
 struct usb_interface_descriptor ac_interface_desc = {
-	.bLength		= USB_DT_INTERFACE_SIZE,
-	.bDescriptorType	= USB_DT_INTERFACE,
-	.bNumEndpoints		= 0,
-	.bInterfaceClass	= USB_CLASS_AUDIO,
-	.bInterfaceSubClass	= USB_SUBCLASS_AUDIOCONTROL,
+	.bLength =		USB_DT_INTERFACE_SIZE,
+	.bDescriptorType =	USB_DT_INTERFACE,
+	.bNumEndpoints =	0,
+	.bInterfaceClass =	USB_CLASS_AUDIO,
+	.bInterfaceSubClass =	USB_SUBCLASS_AUDIOCONTROL,
 };
 
 #define TOTAL_LENGTH (                  \
@@ -95,31 +95,31 @@ struct usb_interface_descriptor ac_interface_desc = {
 	UAC_DT_OUTPUT_TERMINAL_SIZE     \
 	)
 
- /* B.3.2  Class-Specific AC Interface Descriptor */
+/* B.3.2  Class-Specific AC Interface Descriptor */
 struct uac1_ac_header_descriptor_2 ac_header_desc = {
 	.bLength		= UAC_DT_AC_HEADER_SIZE(2),
-	.bDescriptorType	= USB_DT_CS_INTERFACE,
-	.bDescriptorSubtype	= UAC_HEADER,
-	.bcdADC			= __constant_cpu_to_le16(0x0100),
+	.bDescriptorType =	USB_DT_CS_INTERFACE,
+	.bDescriptorSubtype =	UAC_HEADER,
+	.bcdADC =		__constant_cpu_to_le16(0x0100),
 	.wTotalLength		= __constant_cpu_to_le16(TOTAL_LENGTH),
-	.bInCollection		= F_AUDIO_NUM_INTERFACES,
+	.bInCollection =	F_AUDIO_NUM_INTERFACES,
 	/*.baInterfaceNr	= {
 					[0] = F_AUDIO_INTERFACE_MICROPHONE,
 					[1] = F_AUDIO_INTERFACE_SPEAKER,
-				  }
+	}
 	*/
 };
 
 /*---------------------------------*/
 
 struct uac_input_terminal_descriptor speaker_input_terminal_desc = {
-	.bLength		= UAC_DT_INPUT_TERMINAL_SIZE,
-	.bDescriptorType	= USB_DT_CS_INTERFACE,
-	.bDescriptorSubtype	= UAC_INPUT_TERMINAL,
+	.bLength =		UAC_DT_INPUT_TERMINAL_SIZE,
+	.bDescriptorType =	USB_DT_CS_INTERFACE,
+	.bDescriptorSubtype =	UAC_INPUT_TERMINAL,
 	.bTerminalID		= SPEAKER_INPUT_TERMINAL_ID,
-	.wTerminalType		= UAC_TERMINAL_STREAMING,
+	.wTerminalType =	UAC_TERMINAL_STREAMING,
 	.bAssocTerminal		= SPEAKER_OUTPUT_TERMINAL_ID,
-	.wChannelConfig		= 0x3,
+	.wChannelConfig =	0x3,
 };
 
 struct uac1_output_terminal_descriptor speaker_output_terminal_desc = {
@@ -202,65 +202,65 @@ static struct usb_audio_control_selector microphone_fu_controls = {
 
 /*---------------------------------*/
 
- /* B.4.1  Standard AS Interface Descriptor */
+/* B.4.1  Standard AS Interface Descriptor */
 static struct usb_interface_descriptor speaker_as_interface_alt_0_desc = {
-	.bLength		= USB_DT_INTERFACE_SIZE,
-	.bDescriptorType	= USB_DT_INTERFACE,
-	.bAlternateSetting	= 0,
-	.bNumEndpoints		= 0,
-	.bInterfaceClass	= USB_CLASS_AUDIO,
-	.bInterfaceSubClass	= USB_SUBCLASS_AUDIOSTREAMING,
+	.bLength =		USB_DT_INTERFACE_SIZE,
+	.bDescriptorType =	USB_DT_INTERFACE,
+	.bAlternateSetting =	0,
+	.bNumEndpoints =	0,
+	.bInterfaceClass =	USB_CLASS_AUDIO,
+	.bInterfaceSubClass =	USB_SUBCLASS_AUDIOSTREAMING,
 };
 
 static struct usb_interface_descriptor speaker_as_interface_alt_1_desc = {
-	.bLength		= USB_DT_INTERFACE_SIZE,
-	.bDescriptorType	= USB_DT_INTERFACE,
-	.bAlternateSetting	= 1,
-	.bNumEndpoints		= 1,
-	.bInterfaceClass	= USB_CLASS_AUDIO,
-	.bInterfaceSubClass	= USB_SUBCLASS_AUDIOSTREAMING,
+	.bLength =		USB_DT_INTERFACE_SIZE,
+	.bDescriptorType =	USB_DT_INTERFACE,
+	.bAlternateSetting =	1,
+	.bNumEndpoints =	1,
+	.bInterfaceClass =	USB_CLASS_AUDIO,
+	.bInterfaceSubClass =	USB_SUBCLASS_AUDIOSTREAMING,
 };
 
- /* B.4.2  Class-Specific AS Interface Descriptor */
+/* B.4.2  Class-Specific AS Interface Descriptor */
 static struct uac1_as_header_descriptor speaker_as_header_desc = {
-	.bLength		= UAC_DT_AS_HEADER_SIZE,
-	.bDescriptorType	= USB_DT_CS_INTERFACE,
-	.bDescriptorSubtype	= UAC_AS_GENERAL,
+	.bLength =		UAC_DT_AS_HEADER_SIZE,
+	.bDescriptorType =	USB_DT_CS_INTERFACE,
+	.bDescriptorSubtype =	UAC_AS_GENERAL,
 	.bTerminalLink		= SPEAKER_INPUT_TERMINAL_ID,
-	.bDelay			= 1,
-	.wFormatTag		= UAC_FORMAT_TYPE_I_PCM,
+	.bDelay =		1,
+	.wFormatTag =		UAC_FORMAT_TYPE_I_PCM,
 };
 
 static struct uac_format_type_i_discrete_descriptor_1 speaker_as_type_i_desc = {
-	.bLength		= UAC_FORMAT_TYPE_I_DISCRETE_DESC_SIZE(1),
-	.bDescriptorType	= USB_DT_CS_INTERFACE,
-	.bDescriptorSubtype	= UAC_FORMAT_TYPE,
-	.bFormatType		= UAC_FORMAT_TYPE_I,
-	.bSubframeSize		= 2,
-	.bBitResolution		= 16,
-	.bSamFreqType		= 1,
+	.bLength =		UAC_FORMAT_TYPE_I_DISCRETE_DESC_SIZE(1),
+	.bDescriptorType =	USB_DT_CS_INTERFACE,
+	.bDescriptorSubtype =	UAC_FORMAT_TYPE,
+	.bFormatType =		UAC_FORMAT_TYPE_I,
+	.bSubframeSize =	2,
+	.bBitResolution =	16,
+	.bSamFreqType =		1,
 };
 
- /* Standard ISO OUT Endpoint Descriptor */
+/* Standard ISO OUT Endpoint Descriptor */
 static struct usb_endpoint_descriptor speaker_as_ep_out_desc = {
-	.bLength		= USB_DT_ENDPOINT_AUDIO_SIZE,
-	.bDescriptorType	= USB_DT_ENDPOINT,
-	.bEndpointAddress	= USB_DIR_OUT,
+	.bLength =		USB_DT_ENDPOINT_AUDIO_SIZE,
+	.bDescriptorType =	USB_DT_ENDPOINT,
+	.bEndpointAddress =	USB_DIR_OUT,
 	.bmAttributes		= USB_ENDPOINT_SYNC_ADAPTIVE |
 				  USB_ENDPOINT_XFER_ISOC,
 	.wMaxPacketSize		=
 		__constant_cpu_to_le16(PLAYBACK_EP_MAX_PACKET_SIZE),
-	.bInterval		= 4,
+	.bInterval =		4,
 };
 
 /* Class-specific AS ISO OUT Endpoint Descriptor */
 static struct uac_iso_endpoint_descriptor speaker_as_iso_out_desc  = {
-	.bLength		= UAC_ISO_ENDPOINT_DESC_SIZE,
-	.bDescriptorType	= USB_DT_CS_ENDPOINT,
-	.bDescriptorSubtype	= UAC_EP_GENERAL,
-	.bmAttributes		= 1,
-	.bLockDelayUnits	= 1,
-	.wLockDelay		= __constant_cpu_to_le16(1),
+	.bLength =		UAC_ISO_ENDPOINT_DESC_SIZE,
+	.bDescriptorType =	USB_DT_CS_ENDPOINT,
+	.bDescriptorSubtype =	UAC_EP_GENERAL,
+	.bmAttributes = 	1,
+	.bLockDelayUnits =	1,
+	.wLockDelay =		__constant_cpu_to_le16(1),
 };
 
 static struct usb_audio_control speaker_sample_freq_control = {
@@ -437,8 +437,8 @@ static struct f_audio_buf *f_audio_buffer_alloc(int buf_size)
 static void f_audio_buffer_free(struct f_audio_buf *audio_buf)
 {
 	if (audio_buf) {
-		kfree(audio_buf->buf);
-		kfree(audio_buf);
+	kfree(audio_buf->buf);
+	kfree(audio_buf);
 		audio_buf->buf = NULL;
 		audio_buf = NULL;
 	}
@@ -454,8 +454,8 @@ struct f_audio {
 
 	spinlock_t			playback_lock;
 	struct f_audio_buf		*playback_copy_buf;
-	struct work_struct		playback_work;
-	struct list_head		play_queue;
+	struct work_struct playback_work;
+	struct list_head play_queue;
 
 	spinlock_t			capture_lock;
 	struct f_audio_buf		*capture_copy_buf;
@@ -466,8 +466,8 @@ struct f_audio {
 	/* Control Set command */
 	struct list_head		fu_cs;
 	struct list_head		ep_cs;
-	u8				set_cmd;
-	struct usb_audio_control	*set_con;
+	u8 set_cmd;
+	struct usb_audio_control *set_con;
 };
 
 static inline struct f_audio *func_to_audio(struct usb_function *f)
@@ -525,7 +525,7 @@ f_audio_playback_ep_complete(struct usb_ep *ep, struct usb_request *req)
 		if (IS_ERR(copy_buf)) {
 			pr_err("Failed to allocate playback_copy_buf");
 			return -ENOMEM;
-		}
+	}
 	}
 
 	memcpy(copy_buf->buf + copy_buf->actual, req->buf, req->actual);
@@ -611,7 +611,7 @@ static void f_audio_complete(struct usb_ep *ep, struct usb_request *req)
 	u32 data = 0;
 
 	switch (status) {
-	case 0:	/* normal completion? */
+	case 0:				/* normal completion? */
 		if (ep == audio->out_ep) {
 			f_audio_playback_ep_complete(ep, req);
 		} else if (ep == audio->in_ep) {
@@ -719,10 +719,10 @@ static void audio_set_endpoint_complete(struct usb_ep *ep,
 static int audio_set_endpoint_req(struct usb_function *f,
 		const struct usb_ctrlrequest *ctrl)
 {
-	int	value = -EOPNOTSUPP;
-	u16	ep = le16_to_cpu(ctrl->wIndex);
-	u16	len = le16_to_cpu(ctrl->wLength);
-	u16	w_value = le16_to_cpu(ctrl->wValue);
+	int			value = -EOPNOTSUPP;
+	u16			ep = le16_to_cpu(ctrl->wIndex);
+	u16			len = le16_to_cpu(ctrl->wLength);
+	u16			w_value = le16_to_cpu(ctrl->wValue);
 
 	struct f_audio *audio = func_to_audio(f);
 	struct usb_composite_dev *cdev = f->config->cdev;
@@ -755,10 +755,10 @@ static int audio_set_endpoint_req(struct usb_function *f,
 				req->context   = audio;
 				req->complete  = audio_set_endpoint_complete;
 				value = len;
-				break;
+		break;
 			case UAC__MEM:
-				break;
-			default:
+		break;
+	default:
 				pr_err("Unknown command");
 				break;
 			}
@@ -780,10 +780,10 @@ static int audio_get_endpoint_req(struct usb_function *f,
 	struct usb_audio_control *con;
 	int data;
 
-	int value   = -EOPNOTSUPP;
+	int value = -EOPNOTSUPP;
 	u8  ep      = (le16_to_cpu(ctrl->wIndex) & 0x7F);
 	u8  epnum   = ep & ~0x80;
-	u16 len     = le16_to_cpu(ctrl->wLength);
+	u16 len = le16_to_cpu(ctrl->wLength);
 	u16 w_value = le16_to_cpu(ctrl->wValue);
 	u8  con_sel = (w_value >> 8) & 0xFF;
 	u8  cmd     = (ctrl->bRequest & 0x0F);
@@ -806,13 +806,13 @@ static int audio_get_endpoint_req(struct usb_function *f,
 			case UAC__RES:
 				data = cpu_to_le32(generic_get_cmd(con, cmd));
 				memcpy(req->buf, &data, len);
-				value = len;
-				break;
+		value = len;
+		break;
 			case UAC__MEM:
-				break;
-			default:
-				break;
-			}
+		break;
+	default:
+		break;
+	}
 			break;
 		}
 		break;
@@ -884,9 +884,9 @@ f_audio_setup(struct usb_function *f, const struct usb_ctrlrequest *ctrl)
 static int f_audio_set_alt(struct usb_function *f, unsigned intf, unsigned alt)
 {
 	struct f_audio		*audio = func_to_audio(f);
-	struct usb_ep		*out_ep = audio->out_ep;
+	struct usb_ep *out_ep = audio->out_ep;
 	struct usb_ep		*in_ep = audio->in_ep;
-	struct usb_request	*req;
+	struct usb_request *req;
 	unsigned long flags;
 	int i = 0, err = 0;
 
@@ -964,18 +964,18 @@ static int f_audio_set_alt(struct usb_function *f, unsigned intf, unsigned alt)
 					return -ENOMEM;
 				}
 				req->buf = kzalloc(req_playback_buf_size,
-						GFP_ATOMIC);
+							GFP_ATOMIC);
 				if (!req->buf) {
 					pr_err("request buffer allocation failed\n");
 					return -ENOMEM;
 				}
 				req->length = req_playback_buf_size;
-				req->context = audio;
+						req->context = audio;
 				req->complete =	f_audio_complete;
 				err = usb_ep_queue(out_ep, req, GFP_ATOMIC);
-				if (err)
+						if (err)
 					pr_err("Failed to queue %s queue req: err %d\n",
-						out_ep->name, err);
+							out_ep->name, err);
 			}
 			pr_debug("Allocated %d requests\n", req_playback_count);
 		} else {
@@ -1130,7 +1130,7 @@ fail:
 static void
 f_audio_unbind(struct usb_configuration *c, struct usb_function *f)
 {
-	struct f_audio *audio = func_to_audio(f);
+	struct f_audio		*audio = func_to_audio(f);
 
 	usb_free_descriptors(f->descriptors);
 	usb_free_descriptors(f->hs_descriptors);

@@ -3,7 +3,7 @@
  * Core MSM framebuffer driver.
  *
  * Copyright (C) 2007 Google Incorporated
- * Copyright (c) 2008-2013, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2008-2012, Code Aurora Forum. All rights reserved.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -49,6 +49,12 @@
 #include "mdp.h"
 #include "mdp4.h"
 
+#if defined(CONFIG_FB_MSM_MIPI_HX8357_CMD_SMD_HVGA_PT_PANEL)
+#include "lcdc_backlight_ic.h"
+extern int read_recovery;
+#endif
+
+extern int charging_boot;
 #ifdef CONFIG_FB_MSM_TRIPLE_BUFFER
 #define MSM_FB_NUM	3
 #endif
@@ -173,8 +179,10 @@ static void msm_fb_set_bl_brightness(struct led_classdev *led_cdev,
 					enum led_brightness value)
 {
 	struct msm_fb_data_type *mfd = dev_get_drvdata(led_cdev->dev->parent);
-	int bl_lvl;
+	u32 bl_lvl;
 
+	if (value < 0)
+		value = 0;
 	if (value > MAX_BACKLIGHT_BRIGHTNESS)
 		value = MAX_BACKLIGHT_BRIGHTNESS;
 
@@ -185,9 +193,8 @@ static void msm_fb_set_bl_brightness(struct led_classdev *led_cdev,
 
 	if (!bl_lvl && value)
 		bl_lvl = 1;
-	down(&mfd->sem);
+
 	msm_fb_set_backlight(mfd, bl_lvl);
-	up(&mfd->sem);
 }
 
 static struct led_classdev backlight_led = {
@@ -255,6 +262,39 @@ int msm_fb_detect_client(const char *name)
 
 	return ret;
 }
+
+#ifdef CONFIG_APPLY_GA_SOLUTION
+/* Mark for GetLog */
+struct struct_frame_buf_mark {
+	u32 special_mark_1;
+	u32 special_mark_2;
+	u32 special_mark_3;
+	u32 special_mark_4;
+	void *p_fb;
+	u32 resX;
+	u32 resY;
+	u32 bpp;    //color depth : 16 or 24
+	u32 frames; // frame buffer count : 2
+};
+
+static struct struct_frame_buf_mark  frame_buf_mark = {
+	.special_mark_1 = (('*' << 24) | ('^' << 16) | ('^' << 8) | ('*' << 0)),
+	.special_mark_2 = (('I' << 24) | ('n' << 16) | ('f' << 8) | ('o' << 0)),
+	.special_mark_3 = (('H' << 24) | ('e' << 16) | ('r' << 8) | ('e' << 0)),
+	.special_mark_4 = (('f' << 24) | ('b' << 16) | ('u' << 8) | ('f' << 0)),
+	.p_fb   = 0,
+#if 	1
+	.resX	= 256,
+	.resY	= 320,
+	.bpp	= 18,
+#else
+	.resX   = 320,
+	.resY   = 480,
+	.bpp    = 24,
+#endif
+	.frames = 2
+};
+#endif
 
 static ssize_t msm_fb_msm_fb_type(struct device *dev,
 				  struct device_attribute *attr, char *buf)
@@ -338,81 +378,6 @@ static void msm_fb_remove_sysfs(struct platform_device *pdev)
 
 static void bl_workqueue_handler(struct work_struct *work);
 
-static ssize_t msm_fb_xres(struct device *dev,
-		struct device_attribute *attr, char *buf)
-{
-	ssize_t ret = strnlen(buf, PAGE_SIZE);
-	struct fb_info *fbi = dev_get_drvdata(dev);
-	struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)fbi->par;
-
-	ret = snprintf(buf, PAGE_SIZE, "%d\n", mfd->panel_info.xres);
-	buf[strnlen(buf, PAGE_SIZE) + 1] = '\0';
-	return ret;
-}
-static DEVICE_ATTR(xres, S_IRUGO, msm_fb_xres, NULL);
-static struct attribute *xres_fs_attrs[] = {
-	&dev_attr_xres.attr,
-	NULL,
-};
-static struct attribute_group xres_fs_attr_group = {
-	.attrs = xres_fs_attrs,
-};
-
-static ssize_t msm_fb_yres(struct device *dev,
-		struct device_attribute *attr, char *buf)
-{
-	ssize_t ret = strnlen(buf, PAGE_SIZE);
-	struct fb_info *fbi = dev_get_drvdata(dev);
-	struct msm_fb_data_type *mfd = (struct msm_fb_data_type *)fbi->par;
-
-	ret = snprintf(buf, PAGE_SIZE, "%d\n", mfd->panel_info.yres);
-	buf[strnlen(buf, PAGE_SIZE) + 1] = '\0';
-	return ret;
-}
-static DEVICE_ATTR(yres, S_IRUGO, msm_fb_yres, NULL);
-static struct attribute *yres_fs_attrs[] = {
-	&dev_attr_yres.attr,
-	NULL,
-};
-static struct attribute_group yres_fs_attr_group = {
-	.attrs = yres_fs_attrs,
-};
-
-static int msm_fb_resolution_sysfs(struct platform_device *pdev)
-{
-	int rc;
-	struct msm_fb_data_type *mfd = platform_get_drvdata(pdev);
-
-	if (!mfd) {
-		pr_err("%s: mfd not found\n", __func__);
-		return -ENODEV;
-	}
-	if (!mfd->fbi) {
-		pr_err("%s: mfd->fbi not found\n", __func__);
-		return -ENODEV;
-	}
-	if (!mfd->fbi->dev) {
-		pr_err("%s: mfd->fbi->dev not found\n", __func__);
-		return -ENODEV;
-	}
-	rc = sysfs_create_group(&mfd->fbi->dev->kobj,
-		&xres_fs_attr_group);
-	if (rc) {
-		pr_err("%s: sysfs group creation failed, rc=%d\n",
-			__func__, rc);
-		return rc;
-	}
-
-	rc = sysfs_create_group(&mfd->fbi->dev->kobj,
-		&yres_fs_attr_group);
-	if (rc) {
-		pr_err("%s: sysfs group creation failed, rc=%d\n",
-			__func__, rc);
-		return rc;
-	}
-	return 0;
-}
-
 static int msm_fb_probe(struct platform_device *pdev)
 {
 	struct msm_fb_data_type *mfd;
@@ -449,6 +414,11 @@ static int msm_fb_probe(struct platform_device *pdev)
 	if (!msm_fb_resource_initialized)
 		return -EPERM;
 
+#ifdef CONFIG_APPLY_GA_SOLUTION
+	/* Mark for GetLog */
+	frame_buf_mark.p_fb = fbram_phys;
+#endif
+
 	mfd = (struct msm_fb_data_type *)platform_get_drvdata(pdev);
 
 	INIT_DELAYED_WORK(&mfd->backlight_worker, bl_workqueue_handler);
@@ -464,7 +434,7 @@ static int msm_fb_probe(struct platform_device *pdev)
 
 	vsync_cntrl.dev = mfd->fbi->dev;
 	mfd->panel_info.frame_count = 0;
-	mfd->bl_level = 0;
+	mfd->bl_level = 255;
 	bl_scale = 1024;
 	bl_min_lvl = 255;
 #ifdef CONFIG_FB_MSM_OVERLAY
@@ -494,7 +464,6 @@ static int msm_fb_probe(struct platform_device *pdev)
 
 	pdev_list[pdev_list_cnt++] = pdev;
 	msm_fb_create_sysfs(pdev);
-	msm_fb_resolution_sysfs(pdev);
 	return 0;
 }
 
@@ -813,13 +782,57 @@ static struct platform_driver msm_fb_driver = {
 };
 
 #ifdef CONFIG_HAS_EARLYSUSPEND
+#ifdef CONFIG_FB_MSM_MIPI_DSI_WHITESCREEN
+boolean wakeupflag = TRUE ; 
+#endif
+
+#if defined(CONFIG_FB_MSM_MIPI_HX8369B_WVGA_PT_PANEL) || defined(CONFIG_MACH_NEVIS3G_REV03)
+static void memset32_io(u32 __iomem *_ptr, u32 val, size_t count)
+{
+	count >>= 2;
+	while (count--)
+		writel(val, _ptr++);
+}
+#endif
+
 static void msmfb_early_suspend(struct early_suspend *h)
 {
+#ifdef CONFIG_FB_MSM_MIPI_DSI_WHITESCREEN
+	unsigned int waitcount = 5;
+	unsigned int sleepflag = 0;
+#endif
 	struct msm_fb_data_type *mfd = container_of(h, struct msm_fb_data_type,
 						early_suspend);
 	struct msm_fb_panel_data *pdata = NULL;
 
+#if defined(CONFIG_FB_MSM_MIPI_HX8369B_WVGA_PT_PANEL) || defined(CONFIG_MACH_NEVIS3G_REV03)
+	struct fb_info *fbi = mfd->fbi;
+#endif	
+
+#ifdef CONFIG_FB_MSM_MIPI_DSI_WHITESCREEN
+	while(waitcount){
+		if (!mfd->bl_level){
+			sleepflag = 1;
+			break;
+		}
+		msleep(20);
+		waitcount--;
+	}
+	if(sleepflag){
+		msm_fb_suspend_sub(mfd);
+		wakeupflag = TRUE;
+	}
+	else {
+		wakeupflag = FALSE;
+	}
+#else
 	msm_fb_suspend_sub(mfd);
+#endif
+
+#if defined(CONFIG_FB_MSM_MIPI_HX8369B_WVGA_PT_PANEL) || defined(CONFIG_MACH_NEVIS3G_REV03)
+//Sometimes, The screen is seen previous image for a moment
+	memset32_io((void *)fbi->screen_base, 0xFF000000, fbi->fix.smem_len);
+#endif
 
 	pdata = (struct msm_fb_panel_data *)mfd->pdev->dev.platform_data;
 	if (hdmi_prim_display &&
@@ -851,28 +864,34 @@ static void msmfb_early_resume(struct early_suspend *h)
 		}
 	}
 
+#ifdef CONFIG_FB_MSM_MIPI_DSI_WHITESCREEN
+	if(wakeupflag)
+#endif
 	msm_fb_resume_sub(mfd);
 }
 #endif
 
 static int unset_bl_level, bl_updated;
 static int bl_level_old;
+#if defined(CONFIG_FB_MSM_MIPI_CMD_PANEL_AVOID_MOSAIC) || defined(CONFIG_MACH_KYLEPLUS_OPEN) || defined(CONFIG_MACH_INFINITE_DUOS_CTC)
+static u16 screen_unblanked = 0;
+static u16 panel_initializing = 0;
+#endif
+
 static int mdp_bl_scale_config(struct msm_fb_data_type *mfd,
 						struct mdp_bl_scale_data *data)
 {
 	int ret = 0;
-	int curr_bl;
-	down(&mfd->sem);
-	curr_bl = mfd->bl_level;
+	u32 curr_bl = mfd->bl_level;
 	bl_scale = data->scale;
 	bl_min_lvl = data->min_lvl;
 	pr_debug("%s: update scale = %d, min_lvl = %d\n", __func__, bl_scale,
 								bl_min_lvl);
 
 	/* update current backlight to use new scaling*/
-	if (mfd->panel_power_on && bl_updated)
-		msm_fb_set_backlight(mfd, curr_bl);
-	up(&mfd->sem);
+#ifdef CONFIG_FB_MSM_MIPI_HX8369B_WVGA_PT_PANEL
+	msm_fb_set_backlight(mfd, curr_bl);
+#endif
 
 	return ret;
 }
@@ -880,7 +899,6 @@ static int mdp_bl_scale_config(struct msm_fb_data_type *mfd,
 static void msm_fb_scale_bl(__u32 *bl_lvl)
 {
 	__u32 temp = *bl_lvl;
-	pr_debug("%s: input = %d, scale = %d", __func__, temp, bl_scale);
 	if (temp >= bl_min_lvl) {
 		/* bl_scale is the numerator of scaling fraction (x/1024)*/
 		temp = ((*bl_lvl) * bl_scale) / 1024;
@@ -889,34 +907,54 @@ static void msm_fb_scale_bl(__u32 *bl_lvl)
 		if (temp < bl_min_lvl)
 			temp = bl_min_lvl;
 	}
-	pr_debug("%s: output = %d", __func__, temp);
 
 	(*bl_lvl) = temp;
 }
 
-/*must call this function from within mfd->sem*/
 void msm_fb_set_backlight(struct msm_fb_data_type *mfd, __u32 bkl_lvl)
 {
 	struct msm_fb_panel_data *pdata;
 	__u32 temp = bkl_lvl;
+
+#ifdef CONFIG_MACH_ROY     
+//// for debugging backlight temporalily. so later should be removed.
+	printk("[BL] bkl_lvl : %d ,panel_power_on: %d, bl_updated : %d\n",bkl_lvl,mfd->panel_power_on,bl_updated);
+#endif
+
+#if !defined(CONFIG_FB_MSM_MIPI_CMD_PANEL_AVOID_MOSAIC) && !defined(CONFIG_MACH_KYLEPLUS_OPEN) && !defined(CONFIG_MACH_INFINITE_DUOS_CTC)
 	if (!mfd->panel_power_on || !bl_updated) {
+		mfd->bl_level = bkl_lvl;
 		unset_bl_level = bkl_lvl;
 		return;
 	} else {
 		unset_bl_level = 0;
 	}
+#endif
 
+#ifdef CONFIG_FB_MSM_MIPI_HX8369B_WVGA_PT_PANEL
+	msm_fb_scale_bl(&temp);
+#endif
 	pdata = (struct msm_fb_panel_data *)mfd->pdev->dev.platform_data;
 
 	if ((pdata) && (pdata->set_backlight)) {
-		msm_fb_scale_bl(&temp);
+		down(&mfd->sem);
+#if defined(CONFIG_FB_MSM_MIPI_CMD_PANEL_AVOID_MOSAIC) || defined(CONFIG_MACH_KYLEPLUS_OPEN) || defined(CONFIG_MACH_INFINITE_DUOS_CTC)
+		if (panel_initializing) {
+			mfd->bl_level = 0;
+		} else {
+			mfd->bl_level = bkl_lvl;
+		}
+#else		
 		if (bl_level_old == temp) {
+			up(&mfd->sem);
 			return;
 		}
 		mfd->bl_level = temp;
+#endif
 		pdata->set_backlight(mfd);
 		mfd->bl_level = bkl_lvl;
 		bl_level_old = temp;
+		up(&mfd->sem);
 	}
 }
 
@@ -939,12 +977,27 @@ static int msm_fb_blank_sub(int blank_mode, struct fb_info *info,
 	switch (blank_mode) {
 	case FB_BLANK_UNBLANK:
 		if (!mfd->panel_power_on) {
+#if defined(CONFIG_FB_MSM_MIPI_CMD_PANEL_AVOID_MOSAIC)  || defined(CONFIG_MACH_KYLEPLUS_OPEN) || defined(CONFIG_MACH_INFINITE_DUOS_CTC)
+			down(&mfd->sem);
+			panel_initializing = 1;
+			pdata->set_backlight(mfd);
+			up(&mfd->sem);	
+			
+			ret = pdata->on(mfd->pdev);
+			// NOTICE:
+			// it should delay here to avoid flash caused by display_on command
+			// please set it in the pdata->on() according to your LCD
+
+			down(&mfd->sem);
+			panel_initializing = 0;
+			pdata->set_backlight(mfd);
+			up(&mfd->sem);		
+#else
 			msleep(16);
 			ret = pdata->on(mfd->pdev);
+#endif
 			if (ret == 0) {
-				down(&mfd->sem);
 				mfd->panel_power_on = TRUE;
-				up(&mfd->sem);
 
 /* ToDo: possible conflict with android which doesn't expect sw refresher */
 /*
@@ -970,17 +1023,19 @@ static int msm_fb_blank_sub(int blank_mode, struct fb_info *info,
 
 			mfd->op_enable = FALSE;
 			curr_pwr_state = mfd->panel_power_on;
-			down(&mfd->sem);
 			mfd->panel_power_on = FALSE;
-			bl_updated = 0;
-			up(&mfd->sem);
 			cancel_delayed_work_sync(&mfd->backlight_worker);
+			bl_updated = 0;
 
+			// let screen light off smoothly, because backlight is turning off in another thread now
+			// if need delay more, please set it in the pdata->off()
 			msleep(16);
 			ret = pdata->off(mfd->pdev);
 			if (ret)
 				mfd->panel_power_on = curr_pwr_state;
-
+#if defined(CONFIG_FB_MSM_MIPI_CMD_PANEL_AVOID_MOSAIC) || defined(CONFIG_MACH_KYLEPLUS_OPEN) || defined(CONFIG_MACH_INFINITE_DUOS_CTC)
+			screen_unblanked = 0;
+#endif
 			mfd->op_enable = TRUE;
 		}
 		break;
@@ -1375,21 +1430,19 @@ static int msm_fb_register(struct msm_fb_data_type *mfd)
 
 	var->xres = panel_info->xres;
 	var->yres = panel_info->yres;
+#if defined(CONFIG_MACH_ARUBASLIM_OPEN)
+	var->height = panel_info->height;/* height of picture in mm */
+	var->width  = panel_info->width;/* width of picture in mm */
+#endif
 	var->xres_virtual = panel_info->xres;
 	var->yres_virtual = panel_info->yres * mfd->fb_page +
 		((PAGE_SIZE - remainder)/fix->line_length) * mfd->fb_page;
 	var->bits_per_pixel = bpp * 8;	/* FrameBuffer color depth */
 	if (mfd->dest == DISPLAY_LCD) {
-		if (panel_info->type == MDDI_PANEL && panel_info->mddi.is_type1) {
+		if (panel_info->type == MDDI_PANEL && panel_info->mddi.is_type1)
 			var->reserved[4] = panel_info->lcd.refx100 / (100 * 2);
-		} else {
-			if (panel_info->mipi.frame_rate && mdp_rev == MDP_REV_303) {
-				var->reserved[4] = panel_info->mipi.frame_rate;
-			}
-			else {
-				var->reserved[4] = panel_info->lcd.refx100 / 100;
-			}
-		}
+		else
+			var->reserved[4] = panel_info->lcd.refx100 / 100;
 	} else {
 		if (panel_info->type == MIPI_VIDEO_PANEL) {
 			var->reserved[4] = panel_info->mipi.frame_rate;
@@ -1545,9 +1598,14 @@ static int msm_fb_register(struct msm_fb_data_type *mfd)
 	     mfd->index, fbi->var.xres, fbi->var.yres, fbi->fix.smem_len);
 
 #ifdef CONFIG_FB_MSM_LOGO
+#if defined(CONFIG_MACH_NEVIS3G_REV03) || defined(CONFIG_MACH_ROY) || !defined (CONFIG_FB_MSM_MIPI_NT35510_CMD_WVGA_PT_PANEL)// because of strange bottom image display when booting
+#ifndef CONFIG_FB_MSM_MIPI_HX8369B_WVGA_PT_PANEL
 	/* Flip buffer */
-	if (!load_565rle_image(INIT_IMAGE_FILE, bf_supported))
-		;
+	if (charging_boot != 1)	
+		if (!load_565rle_image(INIT_IMAGE_FILE, bf_supported))
+			;
+#endif
+#endif
 #endif
 	ret = 0;
 
@@ -1758,15 +1816,14 @@ static void bl_workqueue_handler(struct work_struct *work)
 				struct msm_fb_data_type, backlight_worker);
 	struct msm_fb_panel_data *pdata = mfd->pdev->dev.platform_data;
 
-	down(&mfd->sem);
-	if ((pdata) && (pdata->set_backlight) && (!bl_updated)
-					&& mfd->panel_power_on) {
+	if ((pdata) && (pdata->set_backlight) && (!bl_updated)) {
+		down(&mfd->sem);
 		mfd->bl_level = unset_bl_level;
 		pdata->set_backlight(mfd);
 		bl_level_old = unset_bl_level;
 		bl_updated = 1;
+		up(&mfd->sem);
 	}
-	up(&mfd->sem);
 }
 
 static int msm_fb_pan_display(struct fb_var_screeninfo *var,
@@ -1851,7 +1908,6 @@ static int msm_fb_pan_display(struct fb_var_screeninfo *var,
 		mdp_set_dma_pan_info(info, NULL, TRUE);
 		if (msm_fb_blank_sub(FB_BLANK_UNBLANK, info, mfd->op_enable)) {
 			pr_err("%s: can't turn on display!\n", __func__);
-			up(&msm_fb_pan_sem);
 			return -EINVAL;
 		}
 	}
@@ -1860,14 +1916,25 @@ static int msm_fb_pan_display(struct fb_var_screeninfo *var,
 			     (var->activate == FB_ACTIVATE_VBL));
 	mdp_dma_pan_update(info);
 	up(&msm_fb_pan_sem);
+	
+#if defined(CONFIG_FB_MSM_MIPI_CMD_PANEL_AVOID_MOSAIC) || defined(CONFIG_MACH_KYLEPLUS_OPEN) || defined(CONFIG_MACH_INFINITE_DUOS_CTC)
+	if (mfd->panel_power_on && !screen_unblanked) {
+		pdata = (struct msm_fb_panel_data *)mfd->pdev->dev.platform_data;
+		if ((pdata) && (pdata->unblank)) {
+			pdata->unblank(mfd->pdev);
+			screen_unblanked = 1;
+		}
+	}
 
+#else
+#if defined(CONFIG_FB_MSM_MIPI_HX8357_CMD_SMD_HVGA_PT_PANEL)
+	if (unset_bl_level && !bl_updated && mfd->panel_power_on) 
+#else
 	if (unset_bl_level && !bl_updated)
+#endif
 		schedule_delayed_work(&mfd->backlight_worker,
 				backlight_duration);
-
-	if (info->node == 0 && (mfd->cont_splash_done)) /* primary */
-		mdp_free_splash_buffer(mfd);
-
+#endif
 	++mfd->panel_info.frame_count;
 	return 0;
 }
@@ -2055,6 +2122,14 @@ static int msm_fb_set_par(struct fb_info *info)
 		msm_fb_blank_sub(FB_BLANK_POWERDOWN, info, mfd->op_enable);
 		msm_fb_blank_sub(FB_BLANK_UNBLANK, info, mfd->op_enable);
 	}
+
+#if defined(CONFIG_FB_MSM_MIPI_HX8357_CMD_SMD_HVGA_PT_PANEL)
+	if( read_recovery > 0 )
+	{
+		msleep(25);
+		backlight_ic_set_brightness(160);
+	}
+#endif
 
 	return 0;
 }
@@ -3037,9 +3112,20 @@ static int msmfb_overlay_play(struct fb_info *info, unsigned long *argp)
 
 	ret = mdp4_overlay_play(info, &req);
 
+#if defined(CONFIG_FB_MSM_MIPI_CMD_PANEL_AVOID_MOSAIC) || defined(CONFIG_MACH_KYLEPLUS_OPEN) || defined(CONFIG_MACH_INFINITE_DUOS_CTC)
+	if (mfd->panel_power_on && !screen_unblanked) {
+		pdata = (struct msm_fb_panel_data *)mfd->pdev->dev.platform_data;
+		if ((pdata) && (pdata->unblank)) {
+			pdata->unblank(mfd->pdev);
+			screen_unblanked = 1;
+		}
+	}
+
+#else
 	if (unset_bl_level && !bl_updated)
 		schedule_delayed_work(&mfd->backlight_worker,
 				backlight_duration);
+#endif
 
 	return ret;
 }
@@ -3827,6 +3913,41 @@ struct platform_device *msm_fb_add_device(struct platform_device *pdev)
 	return this_dev;
 }
 EXPORT_SYMBOL(msm_fb_add_device);
+
+#ifdef CONFIG_SEC_DEBUG_SUBSYS
+int get_fbinfo(int fb_num, unsigned int *fb_paddr, unsigned int *xres,
+		unsigned int *yres, unsigned int *bpp,
+		unsigned char *roff, unsigned char *rlen,
+		unsigned char *goff, unsigned char *glen,
+		unsigned char *boff, unsigned char *blen,
+		unsigned char *aoff, unsigned char *alen)
+{
+	struct fb_info *info;
+
+	if (fb_num >= MAX_FBI_LIST)
+		return -ENODEV;
+
+	info = fbi_list[fb_num];
+	if (!info)
+		return -ENODEV;
+
+	*fb_paddr = (unsigned int)info->fix.smem_start;
+	*xres = ALIGN(info->var.xres, 32);
+	*yres = info->var.yres;
+	*bpp = info->var.bits_per_pixel;
+	*roff = info->var.red.offset;
+	*rlen = info->var.red.length;
+	*goff = info->var.green.offset;
+	*glen = info->var.green.length;
+	*boff = info->var.blue.offset;
+	*blen = info->var.blue.length;
+	*aoff = info->var.transp.offset;
+	*alen = info->var.transp.length;
+
+	return 0;
+}
+#endif
+
 
 int get_fb_phys_info(unsigned long *start, unsigned long *len, int fb_num,
 	int subsys_id)

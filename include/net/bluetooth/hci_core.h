@@ -1,6 +1,6 @@
 /*
    BlueZ - Bluetooth protocol stack for Linux
-   Copyright (c) 2000-2001, 2010-2012, The Linux Foundation. All rights reserved.
+   Copyright (c) 2000-2001, 2010-2012, Code Aurora Forum. All rights reserved.
 
    Written 2000,2001 by Maxim Krasnyansky <maxk@qualcomm.com>
 
@@ -21,7 +21,9 @@
    COPYRIGHTS, TRADEMARKS OR OTHER RIGHTS, RELATING TO USE OF THIS
    SOFTWARE IS DISCLAIMED.
 */
-
+#ifdef CONFIG_BT_MGMT
+#include "hci_core_mgmt.h"
+#else
 #ifndef __HCI_CORE_H
 #define __HCI_CORE_H
 
@@ -1110,3 +1112,5 @@ void hci_le_ltk_neg_reply(struct hci_conn *conn);
 void hci_read_rssi(struct hci_conn *conn);
 
 #endif /* __HCI_CORE_H */
+
+#endif /* BT_MGMT */

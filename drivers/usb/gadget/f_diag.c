@@ -2,7 +2,7 @@
  * Diag Function Device - Route ARM9 and ARM11 DIAG messages
  * between HOST and DEVICE.
  * Copyright (C) 2007 Google, Inc.
- * Copyright (c) 2008-2012, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2008-2012, Code Aurora Forum. All rights reserved.
  * Author: Brian Swetland <swetland@google.com>
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -18,7 +18,6 @@
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/platform_device.h>
-#include <linux/ratelimit.h>
 
 #include <mach/usbdiag.h>
 #include <mach/rpc_hsusb.h>
@@ -36,8 +35,13 @@ static struct usb_interface_descriptor intf_desc = {
 	.bDescriptorType    =	USB_DT_INTERFACE,
 	.bNumEndpoints      =	2,
 	.bInterfaceClass    =	0xFF,
+#if 1 //def CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE
+	.bInterfaceSubClass =	0x10,
+	.bInterfaceProtocol =	0x01,
+#else
 	.bInterfaceSubClass =	0xFF,
 	.bInterfaceProtocol =	0xFF,
+#endif
 };
 
 static struct usb_endpoint_descriptor hs_bulk_in_desc = {
@@ -386,7 +390,6 @@ int usb_diag_read(struct usb_diag_ch *ch, struct diag_request *d_req)
 	struct diag_context *ctxt = ch->priv_usb;
 	unsigned long flags;
 	struct usb_request *req;
-	static DEFINE_RATELIMIT_STATE(rl, 10*HZ, 1);
 
 	if (!ctxt)
 		return -ENODEV;
@@ -416,9 +419,7 @@ int usb_diag_read(struct usb_diag_ch *ch, struct diag_request *d_req)
 		spin_lock_irqsave(&ctxt->lock, flags);
 		list_add_tail(&req->list, &ctxt->read_pool);
 		spin_unlock_irqrestore(&ctxt->lock, flags);
-		/* 1 error message for every 10 sec */
-		if (__ratelimit(&rl))
-			ERROR(ctxt->cdev, "%s: cannot queue"
+		ERROR(ctxt->cdev, "%s: cannot queue"
 				" read request\n", __func__);
 		return -EIO;
 	}
@@ -445,7 +446,6 @@ int usb_diag_write(struct usb_diag_ch *ch, struct diag_request *d_req)
 	struct diag_context *ctxt = ch->priv_usb;
 	unsigned long flags;
 	struct usb_request *req = NULL;
-	static DEFINE_RATELIMIT_STATE(rl, 10*HZ, 1);
 
 	if (!ctxt)
 		return -ENODEV;
@@ -475,9 +475,7 @@ int usb_diag_write(struct usb_diag_ch *ch, struct diag_request *d_req)
 		spin_lock_irqsave(&ctxt->lock, flags);
 		list_add_tail(&req->list, &ctxt->write_pool);
 		spin_unlock_irqrestore(&ctxt->lock, flags);
-		/* 1 error message for every 10 sec */
-		if (__ratelimit(&rl))
-			ERROR(ctxt->cdev, "%s: cannot queue"
+		ERROR(ctxt->cdev, "%s: cannot queue"
 				" read request\n", __func__);
 		return -EIO;
 	}
