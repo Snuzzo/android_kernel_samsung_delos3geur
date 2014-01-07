@@ -988,6 +988,7 @@ void __init msm7627a_bt_power_init(void)
 	int i, rc = 0;
 	struct device *dev;
 
+
 	gpio_bt_config();
 
 	rc = i2c_register_board_info(MSM_GSBI1_QUP_I2C_BUS_ID,

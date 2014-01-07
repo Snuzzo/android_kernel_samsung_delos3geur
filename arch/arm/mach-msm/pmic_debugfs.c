@@ -1,4 +1,4 @@
-/* Copyright (c) 2009, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2009, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -1137,6 +1137,7 @@ static int __init pmic_debugfs_init(void)
 			== NULL) {
 		printk(KERN_ERR "%s(%d): debugfs_create_file: index fail\n",
 			__FILE__, __LINE__);
+		debugfs_remove_recursive(dent);
 		return -1;
 	}
 
@@ -1144,6 +1145,7 @@ static int __init pmic_debugfs_init(void)
 			== NULL) {
 		printk(KERN_ERR "%s(%d): debugfs_create_file: debug fail\n",
 			__FILE__, __LINE__);
+		debugfs_remove_recursive(dent);
 		return -1;
 	}
 

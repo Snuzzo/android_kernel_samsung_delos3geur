@@ -3,7 +3,7 @@
  * MSM architecture cpufreq driver
  *
  * Copyright (C) 2007 Google, Inc.
- * Copyright (c) 2007-2012, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2007-2012, Code Aurora Forum. All rights reserved.
  * Author: Mike A. Chan <mikechan@google.com>
  *
  * This software is licensed under the terms of the GNU General Public
@@ -62,6 +62,54 @@ struct cpu_freq {
 
 static DEFINE_PER_CPU(struct cpu_freq, cpu_freq_info);
 
+
+#ifdef CONFIG_SEC_DVFS
+static unsigned int upper_limit_freq;
+static unsigned int lower_limit_freq;
+static unsigned int cpuinfo_max_freq;
+static unsigned int cpuinfo_min_freq;
+
+unsigned int get_min_lock(void)
+{
+	return lower_limit_freq;
+}
+
+unsigned int get_max_lock(void)
+{
+	return upper_limit_freq;
+}
+
+void set_min_lock(int freq)
+{
+	if (freq <= MIN_FREQ_LIMIT)
+		lower_limit_freq = 0;
+	else if (freq > MAX_FREQ_LIMIT)
+		lower_limit_freq = 0;
+	else
+		lower_limit_freq = freq;
+}
+
+void set_max_lock(int freq)
+{
+	if (freq < MIN_FREQ_LIMIT)
+		upper_limit_freq = 0;
+	else if (freq >= MAX_FREQ_LIMIT)
+		upper_limit_freq = 0;
+	else
+		upper_limit_freq = freq;
+}
+
+int get_max_freq(void)
+{
+	return cpuinfo_max_freq;
+}
+
+int get_min_freq(void)
+{
+	return cpuinfo_min_freq;
+}
+#endif
+
 static int set_cpu_freq(struct cpufreq_policy *policy, unsigned int new_freq)
 {
 	int ret = 0;
@@ -79,6 +127,23 @@ static int set_cpu_freq(struct cpufreq_policy *policy, unsigned int new_freq)
 			pr_debug("min: limiting freq to %d\n", new_freq);
 		}
 	}
+
+#ifdef CONFIG_SEC_DVFS
+	if (lower_limit_freq || upper_limit_freq) {
+		unsigned int t_freq = new_freq;
+
+		if (lower_limit_freq && new_freq < lower_limit_freq)
+			t_freq = lower_limit_freq;
+
+		if (upper_limit_freq && new_freq > upper_limit_freq)
+			t_freq = upper_limit_freq;
+
+		new_freq = t_freq;
+
+		if (new_freq == policy->cur)
+			return 0;
+	}
+#endif
 
 	freqs.old = policy->cur;
 	freqs.new = new_freq;
@@ -281,6 +346,11 @@ static int __cpuinit msm_cpufreq_init(struct cpufreq_policy *policy)
 	policy->max = CONFIG_MSM_CPU_FREQ_MAX;
 #endif
 
+#ifdef CONFIG_SEC_DVFS
+	cpuinfo_max_freq = policy->cpuinfo.max_freq;
+	cpuinfo_min_freq = policy->cpuinfo.min_freq;
+#endif
+
 	cur_freq = acpuclk_get_rate(policy->cpu);
 	if (cpufreq_frequency_table_target(policy, table, cur_freq,
 	    CPUFREQ_RELATION_H, &index) &&
@@ -315,24 +385,20 @@ static int __cpuinit msm_cpufreq_init(struct cpufreq_policy *policy)
 	return 0;
 }
 
-/*
- * Define suspend/resume for cpufreq_driver. Kernel will call
- * these during suspend/resume with interrupts disabled. This
- * helps the suspend/resume variable get's updated before cpufreq
- * governor tries to change the frequency after coming out of suspend.
- */
-static int msm_cpufreq_suspend(struct cpufreq_policy *policy)
+static int msm_cpufreq_suspend(void)
 {
 	int cpu;
 
 	for_each_possible_cpu(cpu) {
+		mutex_lock(&per_cpu(cpufreq_suspend, cpu).suspend_mutex);
 		per_cpu(cpufreq_suspend, cpu).device_suspended = 1;
+		mutex_unlock(&per_cpu(cpufreq_suspend, cpu).suspend_mutex);
 	}
 
-	return 0;
+	return NOTIFY_DONE;
 }
 
-static int msm_cpufreq_resume(struct cpufreq_policy *policy)
+static int msm_cpufreq_resume(void)
 {
 	int cpu;
 
@@ -340,7 +406,22 @@ static int msm_cpufreq_resume(struct cpufreq_policy *policy)
 		per_cpu(cpufreq_suspend, cpu).device_suspended = 0;
 	}
 
-	return 0;
+	return NOTIFY_DONE;
+}
+
+static int msm_cpufreq_pm_event(struct notifier_block *this,
+				unsigned long event, void *ptr)
+{
+	switch (event) {
+	case PM_POST_HIBERNATION:
+	case PM_POST_SUSPEND:
+		return msm_cpufreq_resume();
+	case PM_HIBERNATION_PREPARE:
+	case PM_SUSPEND_PREPARE:
+		return msm_cpufreq_suspend();
+	default:
+		return NOTIFY_DONE;
+	}
 }
 
 static struct freq_attr *msm_freq_attr[] = {
@@ -355,10 +436,12 @@ static struct cpufreq_driver msm_cpufreq_driver = {
 	.verify		= msm_cpufreq_verify,
 	.target		= msm_cpufreq_target,
 	.get		= msm_cpufreq_get_freq,
-	.suspend	= msm_cpufreq_suspend,
-	.resume		= msm_cpufreq_resume,
 	.name		= "msm",
 	.attr		= msm_freq_attr,
+};
+
+static struct notifier_block msm_cpufreq_pm_notifier = {
+	.notifier_call = msm_cpufreq_pm_event,
 };
 
 static int __init msm_cpufreq_register(void)
@@ -374,6 +457,7 @@ static int __init msm_cpufreq_register(void)
 	msm_cpufreq_wq = create_workqueue("msm-cpufreq");
 #endif
 
+	register_pm_notifier(&msm_cpufreq_pm_notifier);
 	return cpufreq_register_driver(&msm_cpufreq_driver);
 }
 

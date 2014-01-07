@@ -97,13 +97,11 @@ struct acdb_data {
 	u32 device_cb_compl;
 	u32 audpp_cb_compl;
 	u32 preproc_cb_compl;
-	u32 audpp_cb_reenable_compl;
 	u8 preproc_stream_id;
 	u8 audrec_applied;
 	u32 multiple_sessions;
 	u32 cur_tx_session;
 	struct acdb_result acdb_result;
-	uint32_t audpp_disabled_features;
 
 	spinlock_t dsp_lock;
 	int dec_id;
@@ -322,7 +320,7 @@ static ssize_t rtc_getsetabid_dbg_write(struct file *filp,
 		write_abid.cmd_id, write_abid.acdb_id,\
 		write_abid.set_abid, write_abid.set_iid, cnt);
 	if (write_abid.acdb_id > ACDB_ID_MAX ||
-		write_abid.acdb_id < ACDB_ID_HANDSET_SPKR){
+		write_abid.acdb_id < 1){
 		rtc_acdb.err = ACDB_RTC_ERR_INVALID_DEVICE;
 		return cnt;
 	}
@@ -958,7 +956,7 @@ static bool rtc_acdb_init(void)
 
 	snprintf(name, sizeof name, "get_set_abid");
 	get_set_abid_dentry = debugfs_create_file(name,
-			S_IFREG | S_IRUGO | S_IWUGO,
+			S_IFREG | S_IRUGO | S_IWUSR | S_IWGRP,
 			NULL, NULL, &rtc_acdb_debug_fops);
 	if (IS_ERR(get_set_abid_dentry)) {
 		MM_ERR("SET GET ABID debugfs_create_file failed\n");
@@ -967,7 +965,7 @@ static bool rtc_acdb_init(void)
 
 	snprintf(name1, sizeof name1, "get_set_abid_data");
 	get_set_abid_data_dentry = debugfs_create_file(name1,
-			S_IFREG | S_IRUGO | S_IWUGO,
+			S_IFREG | S_IRUGO | S_IWUSR | S_IWGRP,
 			NULL, NULL,
 			&rtc_acdb_data_debug_fops);
 	if (IS_ERR(get_set_abid_data_dentry)) {
@@ -1549,40 +1547,6 @@ static s32 acdb_calibrate_audpp(void)
 			MM_DBG("AUDPP is calibrated with MBADRC parameters");
 	}
 done:
-	return result;
-}
-
-static s32 acdb_re_enable_audpp(void)
-{
-	s32	result = 0;
-
-	if ((acdb_data.audpp_disabled_features &
-			(1 << AUDPP_CMD_IIR_TUNING_FILTER))
-			== (1 << AUDPP_CMD_IIR_TUNING_FILTER)) {
-		result = audpp_dsp_set_rx_iir(COMMON_OBJ_ID,
-				acdb_data.pp_iir->active_flag,
-				acdb_data.pp_iir);
-		if (result) {
-			MM_ERR("ACDB=> Failed to send IIR data to postproc\n");
-			result = -EINVAL;
-		} else {
-			MM_DBG("Re-enable IIR parameters");
-		}
-	}
-	if ((acdb_data.audpp_disabled_features & (1 << AUDPP_CMD_MBADRC))
-			== (1 << AUDPP_CMD_MBADRC)) {
-		result = audpp_dsp_set_mbadrc(COMMON_OBJ_ID,
-				acdb_data.pp_mbadrc->enable,
-				acdb_data.pp_mbadrc);
-		if (result) {
-			MM_ERR("ACDB=> Failed to send MBADRC data to"\
-					" postproc\n");
-			result = -EINVAL;
-		} else {
-			MM_DBG("Re-enable MBADRC parameters");
-		}
-	}
-	acdb_data.audpp_disabled_features = 0;
 	return result;
 }
 
@@ -2294,11 +2258,9 @@ static void device_cb(struct dev_evt_msg *evt, void *private)
 			acdb_data.acdb_state &= ~CAL_DATA_READY;
 			goto update_cache;
 		}
-	} else{
+	} else
 		/* state is updated to query the modem for values */
-		acdb_data.audrec_applied &= ~AUDREC_READY;
 		acdb_data.acdb_state &= ~CAL_DATA_READY;
-	      }
 
 update_cache:
 	if (dev_type.tx_device) {
@@ -2349,22 +2311,6 @@ done:
 static void audpp_cb(void *private, u32 id, u16 *msg)
 {
 	MM_DBG("\n");
-
-	if (id == AUDPP_MSG_PP_DISABLE_FEEDBACK) {
-		acdb_data.audpp_disabled_features |=
-			((uint32_t)(msg[AUDPP_DISABLE_FEATS_MSW] << 16) |
-			 msg[AUDPP_DISABLE_FEATS_LSW]);
-		MM_INFO("AUDPP disable feedback: %x",
-				acdb_data.audpp_disabled_features);
-		goto done;
-	} else if (id == AUDPP_MSG_PP_FEATS_RE_ENABLE) {
-		MM_INFO("AUDPP re-enable messaage: %x",
-				acdb_data.audpp_disabled_features);
-		acdb_data.audpp_cb_reenable_compl = 1;
-		wake_up(&acdb_data.wait);
-		return;
-	}
-
 	if (id != AUDPP_MSG_CFG_MSG)
 		goto done;
 
@@ -2558,7 +2504,6 @@ static s32 acdb_calibrate_device(void *data)
 		wait_event_interruptible(acdb_data.wait,
 					(acdb_data.device_cb_compl
 					| acdb_data.audpp_cb_compl
-					| acdb_data.audpp_cb_reenable_compl
 					| acdb_data.preproc_cb_compl));
 		mutex_lock(&acdb_data.acdb_mutex);
 		if (acdb_data.device_cb_compl) {
@@ -2589,11 +2534,6 @@ static s32 acdb_calibrate_device(void *data)
 			if (acdb_data.device_info->dev_type.tx_device)
 				handle_tx_device_ready_callback();
 			else {
-				if (acdb_data.audpp_cb_reenable_compl) {
-					MM_INFO("Reset disabled feature flag");
-					acdb_data.audpp_disabled_features = 0;
-					acdb_data.audpp_cb_reenable_compl = 0;
-				}
 				acdb_cache_rx.node_status =\
 						ACDB_VALUES_FILLED;
 				if (acdb_data.acdb_state &
@@ -2606,7 +2546,6 @@ static s32 acdb_calibrate_device(void *data)
 		}
 
 		if (!(acdb_data.audpp_cb_compl ||
-				acdb_data.audpp_cb_reenable_compl ||
 				acdb_data.preproc_cb_compl)) {
 			MM_DBG("need to wait for either AUDPP / AUDPREPROC "\
 					"Event\n");
@@ -2615,19 +2554,8 @@ static s32 acdb_calibrate_device(void *data)
 		} else {
 			MM_DBG("got audpp / preproc call back\n");
 			if (acdb_data.audpp_cb_compl) {
-				if (acdb_data.audpp_cb_reenable_compl) {
-					MM_INFO("Reset disabled feature flag");
-					acdb_data.audpp_disabled_features = 0;
-					acdb_data.audpp_cb_reenable_compl = 0;
-				}
 				send_acdb_values_for_active_devices();
 				acdb_data.audpp_cb_compl = 0;
-				mutex_unlock(&acdb_data.acdb_mutex);
-				continue;
-			} else if (acdb_data.audpp_cb_reenable_compl) {
-				acdb_re_enable_audpp();
-				acdb_data.audpp_disabled_features = 0;
-				acdb_data.audpp_cb_reenable_compl = 0;
 				mutex_unlock(&acdb_data.acdb_mutex);
 				continue;
 			} else {

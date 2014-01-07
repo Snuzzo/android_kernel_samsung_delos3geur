@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2007 Google, Inc.
- * Copyright (c) 2008-2012, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2008-2012, Code Aurora Forum. All rights reserved.
  * Author: Brian Swetland <swetland@google.com>
  *
  * This software is licensed under the terms of the GNU General Public
@@ -36,6 +36,12 @@
  * changes.
  *
  */
+
+#ifdef __ASSEMBLY__
+#define IOMEM(x)	x
+#else
+#define IOMEM(x)	((void __force __iomem *)(x))
+#endif
 
 #define MSM_DEBUG_UART_SIZE	SZ_4K
 

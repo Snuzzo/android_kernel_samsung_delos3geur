@@ -1,7 +1,7 @@
 /* linux/arch/arm/mach-msm/devices.h
  *
  * Copyright (C) 2008 Google, Inc.
- * Copyright (c) 2009-2012, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2009-2012, Code Aurora Forum. All rights reserved.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -155,7 +155,6 @@ extern struct platform_device msm8625_device_hsusb_host;
 extern struct platform_device msm8625_device_otg;
 extern struct platform_device msm8625_kgsl_3d0;
 extern struct platform_device msm8625_device_adsp;
-extern struct platform_device msm_device_pbus;
 
 extern struct platform_device msm_slim_ctrl;
 extern struct platform_device msm_device_sps;
@@ -299,6 +298,9 @@ extern struct platform_device fsm_qfp_fuse_device;
 extern struct platform_device fsm_xo_device;
 
 extern struct platform_device qfec_device;
+
+extern struct clk_lookup msm_clocks_7x27a_uart[];
+extern unsigned msm_num_clocks_7x27a_uart;
 
 extern struct platform_device msm_kgsl_3d0;
 extern struct platform_device msm_kgsl_2d0;

@@ -1,7 +1,7 @@
 /* linux/include/mach/hsusb.h
  *
  * Copyright (C) 2008 Google, Inc.
- * Copyright (c) 2009-2012, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2009-2012, Code Aurora Forum. All rights reserved.
  * Author: Brian Swetland <swetland@google.com>
  *
  * This software is licensed under the terms of the GNU General Public
@@ -138,6 +138,9 @@ struct msm_hsusb_gadget_platform_data {
 
 	int self_powered;
 	int is_phy_status_timer_on;
+#if defined(CONFIG_USB_ANDROID_SAMSUNG_COMPOSITE)
+	int (*get_usb_chg_type)(void);
+#endif
 	bool prop_chg;
 };
 

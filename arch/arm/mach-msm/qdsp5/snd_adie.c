@@ -1,4 +1,4 @@
-/* Copyright (c) 2009, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2009, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -459,7 +459,7 @@ static int __init snd_adie_init(void)
 	char name[sizeof "msm_snd_adie"];
 
 	snprintf(name, sizeof name, "msm_snd_adie");
-	dentry = debugfs_create_file(name, S_IFREG | S_IRUGO | S_IWUGO,
+	dentry = debugfs_create_file(name, 0664,
 			NULL, NULL, &snd_adie_debug_fops);
 	if (IS_ERR(dentry))
 		MM_DBG("debugfs_create_file failed\n");

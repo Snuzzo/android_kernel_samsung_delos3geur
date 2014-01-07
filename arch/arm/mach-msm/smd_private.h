@@ -1,7 +1,7 @@
 /* arch/arm/mach-msm/smd_private.h
  *
  * Copyright (C) 2007 Google, Inc.
- * Copyright (c) 2007-2012, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2007-2012, Code Aurora Forum. All rights reserved.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -20,6 +20,8 @@
 #include <linux/spinlock.h>
 #include <mach/msm_smsm.h>
 #include <mach/msm_smd.h>
+
+#include "smem_vendor_type.h"
 
 #define PC_APPS  0
 #define PC_MODEM 1
@@ -79,7 +81,10 @@ struct smsm_interrupt_info {
   uint32_t aArm_wakeup_reason;
 };
 #elif !defined(CONFIG_MSM_SMD)
-/* Don't trigger the error */
+void *smem_alloc(unsigned id, unsigned size)
+{
+	return NULL;
+}
 #else
 #error No SMD Package Specified; aborting
 #endif

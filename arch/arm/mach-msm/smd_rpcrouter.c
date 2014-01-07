@@ -541,9 +541,7 @@ static void rpcrouter_register_board_dev(struct rr_server *server)
 			D("%s: registering device %x\n",
 			  __func__, board_info->dev->prog);
 			list_del(&board_info->list);
-			preempt_disable();
 			rc = platform_device_register(&board_info->dev->pdev);
-			preempt_enable();
 			if (rc)
 				pr_err("%s: board dev register failed %d\n",
 				       __func__, rc);
@@ -1040,6 +1038,10 @@ static void do_read_data(struct work_struct *work)
 	struct rr_packet *pkt;
 	struct rr_fragment *frag;
 	struct msm_rpc_endpoint *ept;
+#if defined(CONFIG_DOGKEEPALIVE_LOG)
+	struct rpc_request_hdr *rq_tmp;
+	uint32_t prog = 0;
+#endif
 #if defined(CONFIG_MSM_ONCRPCROUTER_DEBUG)
 	struct rpc_request_hdr *rq;
 #endif
@@ -1103,6 +1105,17 @@ static void do_read_data(struct work_struct *work)
 		kfree(frag);
 		goto fail_io;
 	}
+
+#if defined(CONFIG_DOGKEEPALIVE_LOG)
+	rq_tmp = (struct rpc_request_hdr *) frag->data;
+	prog = ntohl(rq_tmp->prog);
+	if( prog == 0x30000015)
+	{
+		uint32_t xid = 0;
+		xid = ntohl(rq_tmp->xid);
+		printk(KERN_ERR "[DOG_KEEPALIVE] read xid : 0x%x \n", xid);
+    }
+#endif
 
 #if defined(CONFIG_MSM_ONCRPCROUTER_DEBUG)
 	if ((smd_rpcrouter_debug_mask & RAW_PMR) &&
@@ -2443,7 +2456,7 @@ void msm_rpcrouter_xprt_notify(struct rpcrouter_xprt *xprt, unsigned event)
 {
 	struct rpcrouter_xprt_info *xprt_info;
 	struct rpcrouter_xprt_work *xprt_work;
-	unsigned long flags;
+	unsigned long flags; 
 
 	/* Workqueue is created in init function which works for all existing
 	 * clients.  If this fails in the future, then it will need to be
@@ -2475,13 +2488,13 @@ void msm_rpcrouter_xprt_notify(struct rpcrouter_xprt *xprt, unsigned event)
 
 	xprt_info = xprt->priv;
 	if (xprt_info) {
-		spin_lock_irqsave(&xprt_info->lock, flags);
 		/* Check read_avail even for OPEN event to handle missed
 		   DATA events while processing the OPEN event*/
+		spin_lock_irqsave(&xprt_info->lock, flags); 
 		if (xprt->read_avail() >= xprt_info->need_len)
 			wake_lock(&xprt_info->wakelock);
 		wake_up(&xprt_info->read_wait);
-		spin_unlock_irqrestore(&xprt_info->lock, flags);
+		spin_unlock_irqrestore(&xprt_info->lock, flags); 
 	}
 }
 
@@ -2547,7 +2560,10 @@ static int __init rpcrouter_init(void)
 
 	ret = msm_rpcrouter_init_devices();
 	if (ret < 0)
+	{ 
+		destroy_workqueue(rpcrouter_workqueue); 
 		return ret;
+	}
 
 	return ret;
 }

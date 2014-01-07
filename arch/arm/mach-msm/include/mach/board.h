@@ -1,7 +1,7 @@
 /* arch/arm/mach-msm/include/mach/board.h
  *
  * Copyright (C) 2007 Google, Inc.
- * Copyright (c) 2008-2012, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2008-2012, Code Aurora Forum. All rights reserved.
  * Author: Brian Swetland <swetland@google.com>
  *
  * This software is licensed under the terms of the GNU General Public
@@ -413,8 +413,6 @@ struct msm_panel_common_pdata {
 	u32 ov1_wb_size;  /* overlay1 writeback size */
 	u32 mem_hid;
 	char cont_splash_enabled;
-	u32 splash_screen_addr;
-	u32 splash_screen_size;
 	char mdp_iommu_split_domain;
 };
 

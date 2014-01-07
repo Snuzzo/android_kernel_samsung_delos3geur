@@ -52,6 +52,10 @@
 
 #define VMAX_BREACH_CNT 15
 
+
+#if defined(CONFIG_MACH_NEVIS3G) || defined(CONFIG_MACH_NEVIS3G_REV03)
+void __iomem *virt_start_ptr;
+#endif
 /* Need platform device handle for suspend and resume APIs */
 static struct platform_device *cpr_pdev;
 
@@ -71,7 +75,7 @@ MODULE_PARM_DESC(nom_Vmin, "Nominal VMin");
 MODULE_PARM_DESC(turbo_Vmin, "Turbo VMin");
 MODULE_PARM_DESC(max_quot, "Max Quot");
 
-extern struct regulator *ext_vreg_handle;
+extern struct regulator *ncp6335d_handle;
 
 static int msm_cpr_debug_mask;
 module_param_named(
@@ -503,7 +507,7 @@ static void cpr_set_vdd(struct msm_cpr *cpr, enum cpr_action action)
 	if (action == UP) {
 		/* Clear IRQ, NACK and return if Vdd already at Vmax */
 		if (cpr->max_volt_set == 1) {
-			if (++max_volt_count >= VMAX_BREACH_CNT) {
+			if (++max_volt_count >= VMAX_BREACH_CNT) { 
 				/* Disable CPR */
 				cpr_disable(cpr);
 			}
@@ -905,7 +909,7 @@ int msm_cpr_pm_suspend(void)
 	if (!enable || disable_cpr)
 		return 0;
 
-	max_volt_count = 0;
+	max_volt_count = 0; 
 	return msm_cpr_suspend();
 }
 EXPORT_SYMBOL(msm_cpr_pm_suspend);
@@ -948,7 +952,6 @@ static int __devinit msm_cpr_probe(struct platform_device *pdev)
 	void __iomem *base;
 	struct resource *mem;
 	struct msm_cpr_mode *chip_data;
-	uint32_t curr_volt, new_volt;
 
 	if (!enable)
 		return -EPERM;
@@ -970,8 +973,14 @@ static int __devinit msm_cpr_probe(struct platform_device *pdev)
 		return -ENOMEM;
 	}
 
+#if defined(CONFIG_MACH_NEVIS3G) || defined(CONFIG_MACH_NEVIS3G_REV03)
+	virt_start_ptr = ioremap_nocache(MSM8625_NON_CACHE_MEM, SZ_2K);
+#endif
 	msm_cpr_debug(MSM_CPR_DEBUG_CONFIG,
 		"virt_start_ptr = %x\n", (uint32_t) virt_start_ptr);
+#if defined(CONFIG_MACH_NEVIS3G) || defined(CONFIG_MACH_NEVIS3G_REV03)
+	memset(virt_start_ptr, 0x0, SZ_2K);
+#endif
 
 	/* enable clk for cpr */
 	if (!pdata->clk_enable) {
@@ -1034,56 +1043,12 @@ static int __devinit msm_cpr_probe(struct platform_device *pdev)
 	spin_lock_init(&cpr->cpr_lock);
 
 	/* Initialize the Voltage domain for CPR */
-	if (ext_vreg_handle == NULL)
-		cpr->vreg_cx = regulator_get(&pdev->dev, "vddx_cx");
-	else
-		cpr->vreg_cx = ext_vreg_handle;
+	cpr->vreg_cx = ncp6335d_handle;
 
-	if (IS_ERR(cpr->vreg_cx)) {
+	if (IS_ERR_OR_NULL(cpr->vreg_cx)) {
 		res = PTR_ERR(cpr->vreg_cx);
 		pr_err("could not get regulator: %d\n", res);
 		goto err_reg_get;
-	}
-
-	/*
-	 * Calculate the step size by adding 1mV to the current voltage.
-	 * This moves the voltage by one regulator step. Diff between original
-	 * and current voltage to get the real regulator step.
-	 */
-	if (cpr->vreg_cx == ext_vreg_handle) {
-		curr_volt = regulator_get_voltage(cpr->vreg_cx);
-		if (curr_volt < 0) {
-			pr_err("CPR: get voltage failed\n");
-			goto err_reg_get;
-		}
-
-		res = regulator_set_voltage(cpr->vreg_cx, curr_volt+1,
-								curr_volt+1);
-		if (res) {
-			pr_err("CPR: Unable to calculate voltage step_size\n");
-			goto err_reg_get;
-		}
-		new_volt = regulator_get_voltage(cpr->vreg_cx);
-		if (new_volt < 0) {
-			pr_err("CPR: get voltage failed\n");
-			goto err_reg_get;
-		}
-
-		if ((new_volt - curr_volt) > 0)
-			cpr->step_size = (new_volt - curr_volt);
-
-		pdata->cpr_mode_data->step_div
-			= DIV_ROUND_CLOSEST(pdata->step_size, cpr->step_size);
-
-		pdata->dn_threshold
-			= DIV_ROUND_UP((pdata->step_size
-					* (pdata->dn_threshold - 1)),
-					cpr->step_size) + 1;
-
-		pr_info("CPR: step_size: %d, step_div: %d, dn_threshold: %d\n",
-				cpr->step_size,
-				pdata->cpr_mode_data->step_div,
-				pdata->dn_threshold);
 	}
 
 	/* Initial configuration of CPR */

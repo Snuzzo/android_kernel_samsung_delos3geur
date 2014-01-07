@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2012, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2012, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -232,7 +232,7 @@ int __devinit msm_pm_boot_init(struct msm_pm_boot_platform_data *pdata)
 				 * Enable boot remapper for C2 [bit:25th]
 				 * Enable boot remapper for C3 [bit:26th]
 				 */
-				__raw_writel(readl_relaxed(pdata->v_addr +
+			__raw_writel(readl_relaxed(pdata->v_addr +
 					mpa5_cfg_ctl[1]) | (0x3 << 25),
 					pdata->v_addr + mpa5_cfg_ctl[1]);
 			}

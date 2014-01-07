@@ -1,4 +1,4 @@
-/* Copyright (c) 2009, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2009, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -114,6 +114,8 @@ static void __exit proc_comm_test_mod_exit(void)
 static int __init proc_comm_test_mod_init(void)
 {
 	dent = debugfs_create_file("proc_comm", 0444, 0, NULL, &debug_ops);
+	if (dent == NULL)
+		 return -ENOMEM;
 	proc_comm_test_res = -1;
 	return 0;
 }

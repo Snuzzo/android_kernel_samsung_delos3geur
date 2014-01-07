@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2007 Google, Inc.
- * Copyright (c) 2009-2012, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2009-2012, Code Aurora Forum. All rights reserved.
  *
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
@@ -32,6 +32,9 @@
 #include <mach/msm_iomap.h>
 #include <mach/irqs.h>
 #include <mach/socinfo.h>
+#ifdef CONFIG_SEC_DEBUG
+#include <linux/sec_debug.h>
+#endif
 
 #if defined(CONFIG_MSM_SMD)
 #include "smd_private.h"
@@ -202,6 +205,9 @@ static irqreturn_t msm_timer_interrupt(int irq, void *dev_id)
 	if (evt->event_handler == NULL)
 		return IRQ_HANDLED;
 	evt->event_handler(evt);
+#ifdef CONFIG_SEC_DEBUG_SCHED_LOG
+	sec_debug_timer_log(2222, (int)irqs_disabled(),	(void *)evt->event_handler);
+#endif /* CONFIG_SEC_DEBUG_SCHED_LOG */
 	return IRQ_HANDLED;
 }
 

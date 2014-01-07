@@ -1,4 +1,4 @@
-/* Copyright (c) 2007-2009,2012 The Linux Foundation. All rights reserved.
+/* Copyright (c) 2007-2009,2012 Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -26,7 +26,9 @@
 #define OFF	0
 #define TARGET_IS_8625	1
 #define POWER_COLLAPSED 1
+#if !defined(CONFIG_MACH_NEVIS3G) && !defined(CONFIG_MACH_NEVIS3G_REV03)
 #define IDLE_V7_START_PHY	0x0FC00000
+#endif
 
 #ifndef __ASSEMBLY__
 
@@ -42,6 +44,7 @@ void msm_pm_set_l2_flush_flag(unsigned int flag);
 extern unsigned long msm_pm_pc_pgd;
 extern unsigned long msm_pm_boot_vector[NR_CPUS];
 extern uint32_t target_type;
+extern uint32_t nop_size;
 extern uint32_t apps_power_collapse;
 extern uint32_t *l2x0_base_addr;
 extern uint32_t *spm0_base_addr;
@@ -49,9 +52,13 @@ extern uint32_t *spm1_base_addr;
 extern uint32_t *spm2_base_addr;
 extern uint32_t *spm3_base_addr;
 extern uint32_t *apps_pwr_dwn;
-/* test code */
-extern uint32_t *idle_v7_start_ptr;
 extern uint32_t *pm_write_smem_data;
+
+
+/* test code */
+#if !defined(CONFIG_MACH_NEVIS3G) && !defined(CONFIG_MACH_NEVIS3G_REV03)
+extern uint32_t *idle_v7_start_ptr;
+#endif
 /* test code */
 #else
 static inline void msm_pm_set_l2_flush_flag(unsigned int flag)

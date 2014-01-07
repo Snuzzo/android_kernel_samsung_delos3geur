@@ -1,7 +1,7 @@
 
 /* audio_lpa.c - low power audio driver
  *
- * Copyright (c) 2012, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012, Code Aurora Forum. All rights reserved.
  *
  * Based on the PCM decoder driver in arch/arm/mach-msm/qdsp5/audio_pcm.c
  *
@@ -1100,6 +1100,14 @@ static long audio_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 	case AUDIO_ASYNC_READ:
 		MM_ERR("AUDIO_ASYNC_READ not supported\n");
 		rc = -EPERM;
+		break;
+
+	case AUDIO_GET_SESSION_ID:
+		if (copy_to_user((void *) arg, &audio->dec_id,
+			sizeof(unsigned short)))
+			rc = -EFAULT;
+		else
+			rc = 0;
 		break;
 
 	default:

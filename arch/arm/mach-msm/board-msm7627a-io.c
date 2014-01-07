@@ -1,4 +1,4 @@
-/* Copyright (c) 2012, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -33,6 +33,8 @@
 
 #include "board-msm7627a.h"
 #include "devices-msm7x2xa.h"
+
+#if 0
 
 #define ATMEL_TS_I2C_NAME "maXTouch"
 #define ATMEL_X_OFFSET 13
@@ -198,7 +200,6 @@ static struct platform_device kp_pdev_8625 = {
 
 #define MXT_TS_IRQ_GPIO         48
 #define MXT_TS_RESET_GPIO       26
-#define MXT_TS_EVBD_IRQ_GPIO    115
 #define MAX_VKEY_LEN		100
 
 static ssize_t mxt_virtual_keys_register(struct kobject *kobj,
@@ -324,7 +325,7 @@ static const u8 mxt_config_data_evt[] = {
 	0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 	0, 0, 0, 0,
 	/* T40 Object */
-	0, 0, 0, 0, 0,
+	17, 0, 0, 30, 30,
 	/* T42 Object */
 	3, 20, 45, 40, 128, 0, 0, 0,
 	/* T46 Object */
@@ -865,8 +866,11 @@ static struct platform_device tricolor_leds_pdev = {
 	},
 };
 
+#endif
+
 void __init msm7627a_add_io_devices(void)
 {
+#if 0 //ARUBA Temp
 	/* touchscreen */
 	if (machine_is_msm7625a_surf() || machine_is_msm7625a_ffa()) {
 		atmel_ts_pdata.min_x = 0;
@@ -897,10 +901,12 @@ void __init msm7627a_add_io_devices(void)
 	if (machine_is_msm7x27a_ffa() || machine_is_msm7625a_ffa()
 					|| machine_is_msm8625_ffa())
 		msm_init_pmic_vibrator();
+#endif
 }
 
 void __init qrd7627a_add_io_devices(void)
 {
+#if 0
 	int rc;
 
 	/* touchscreen */
@@ -969,37 +975,6 @@ void __init qrd7627a_add_io_devices(void)
 				rmi4_i2c_devices,
 				ARRAY_SIZE(rmi4_i2c_devices));
 		}
-		else {
-			if (machine_is_msm8625q_evbd()) {
-				mxt_config_array[0].config = mxt_config_data;
-				mxt_config_array[0].config_length =
-				ARRAY_SIZE(mxt_config_data);
-				mxt_platform_data.panel_maxy = 875;
-				mxt_platform_data.need_calibration = true;
-				mxt_platform_data.irq_gpio = MXT_TS_EVBD_IRQ_GPIO;
-				mxt_vkey_setup();
-
-			rc = gpio_tlmm_config(GPIO_CFG(MXT_TS_EVBD_IRQ_GPIO, 0,
-						GPIO_CFG_INPUT, GPIO_CFG_PULL_UP,
-						GPIO_CFG_8MA), GPIO_CFG_ENABLE);
-			if (rc) {
-				pr_err("%s: gpio_tlmm_config for %d failed\n",
-						__func__, MXT_TS_EVBD_IRQ_GPIO);
-			}
-
-			rc = gpio_tlmm_config(GPIO_CFG(MXT_TS_RESET_GPIO, 0,
-						GPIO_CFG_OUTPUT, GPIO_CFG_PULL_DOWN,
-						GPIO_CFG_8MA), GPIO_CFG_ENABLE);
-			if (rc) {
-				pr_err("%s: gpio_tlmm_config for %d failed\n",
-						__func__, MXT_TS_RESET_GPIO);
-			}
-
-			i2c_register_board_info(MSM_GSBI1_QUP_I2C_BUS_ID,
-				mxt_device_info,
-				ARRAY_SIZE(mxt_device_info));
-			}
-		}
 	}
 
 	/* handset and power key*/
@@ -1067,4 +1042,5 @@ void __init qrd7627a_add_io_devices(void)
 	if (machine_is_msm7627a_evb() || machine_is_msm8625_evb() ||
 		machine_is_msm8625_evt() || machine_is_msm8625q_evbd())
 		platform_device_register(&tricolor_leds_pdev);
+#endif
 }

@@ -1,4 +1,4 @@
-/* Copyright (c) 2010, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2010, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -23,6 +23,11 @@ struct msm_serial_platform_data {
 	unsigned char inject_rx_on_wakeup;
 	char rx_to_inject;
 	int userid;
+
+	/* for gpio set */
+	int use_console;
+	int (*gpio_config)(int);
+	 
 };
 
 #endif

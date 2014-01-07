@@ -2,7 +2,7 @@
  *
  * qcelp 13k audio decoder device
  *
- * Copyright (c) 2008-2009, 2011-2012 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2008-2009, 2011-2012 Code Aurora Forum. All rights reserved.
  *
  * This code is based in part on audio_mp3.c, which is
  * Copyright (C) 2008 Google, Inc.
@@ -254,7 +254,7 @@ static int audqcelp_enable(struct audio *audio)
 		if (rc < 0) {
 			msm_adsp_dump(audio->audplay);
 			return rc;
-		}
+	}
 	}
 
 	if (msm_adsp_enable(audio->audplay)) {

@@ -211,13 +211,9 @@ static void audpp_broadcast(struct audpp_state *audpp, unsigned id,
 			    uint16_t *msg)
 {
 	unsigned n;
-
-	if ((id != AUDPP_MSG_PP_DISABLE_FEEDBACK) &&
-		(id != AUDPP_MSG_PP_FEATS_RE_ENABLE)) {
-		for (n = 0; n < AUDPP_CLNT_MAX_COUNT; n++) {
-			if (audpp->func[n])
-				audpp->func[n] (audpp->private[n], id, msg);
-		}
+	for (n = 0; n < AUDPP_CLNT_MAX_COUNT; n++) {
+		if (audpp->func[n])
+			audpp->func[n] (audpp->private[n], id, msg);
 	}
 
 	for (n = 0; n < MAX_EVENT_CALLBACK_CLIENTS; ++n)
@@ -262,6 +258,11 @@ static void audpp_dsp_event(void *data, unsigned id, size_t len,
 	unsigned long flags;
 	uint16_t msg[8];
 	int cid = 0;
+
+	if(audpp == NULL) {
+		MM_ERR("Invalid audpp pointer");
+		return;
+	}	
 
 	if (id == AUDPP_MSG_AVSYNC_MSG) {
 		spin_lock_irqsave(&audpp->avsync_lock, flags);
@@ -340,14 +341,6 @@ static void audpp_dsp_event(void *data, unsigned id, size_t len,
 		MM_INFO(" RTC ACK --> %x %x %x\n", msg[0],\
 			msg[1], msg[2]);
 		acdb_rtc_set_err(msg[2]);
-		break;
-	case AUDPP_MSG_PP_DISABLE_FEEDBACK:
-		MM_DBG("PP Disable feedback due to mips limitation");
-		audpp_broadcast(audpp, id, msg);
-		break;
-	case AUDPP_MSG_PP_FEATS_RE_ENABLE:
-		MM_DBG("Re-enable the disabled PP features");
-		audpp_broadcast(audpp, id, msg);
 		break;
 	default:
 		MM_ERR("unhandled msg id %x\n", id);
@@ -460,7 +453,6 @@ void audpp_disable(int id, void *private)
 			if (rc == 0)
 				msm_adsp_dump(audpp->mod);
 		}
-		audpp->enabled = 0;
 		msm_adsp_disable(audpp->mod);
 		msm_adsp_put(audpp->mod);
 		audpp->mod = NULL;

@@ -52,9 +52,8 @@
 
 /* Max CPU frequency allowed by hardware while in standby waiting for an irq. */
 #define MAX_WAIT_FOR_IRQ_KHZ 128000
-#define SHUTDOWN_FREQ_KHZ 700800
 
-struct regulator *ext_vreg_handle;
+struct regulator *ncp6335d_handle;
 
 /**
  * enum - For acpuclock PLL IDs
@@ -67,12 +66,6 @@ enum {
 	ACPU_PLL_4,
 	ACPU_PLL_TCXO,
 	ACPU_PLL_END,
-};
-
-enum {
-	STATE_NORMAL		= 0,
-	STATE_SHUTDOWN_PREPARE,
-	STATE_SHUTDOWN_DONE,
 };
 
 struct acpu_clk_src {
@@ -102,13 +95,11 @@ static struct pll_config pll4_cfg_tbl[] = {
 
 struct clock_state {
 	struct clkctl_acpu_speed	*current_speed;
-	struct clkctl_acpu_speed	*prev_speed;
 	struct mutex			lock;
 	uint32_t			max_speed_delta_khz;
 	struct clk			*ebi1_clk;
 	struct regulator		*vreg_cpu;
 	bool				probe_success;
-	int				restart_config_done;
 };
 
 struct clkctl_acpu_speed {
@@ -335,16 +326,6 @@ static int acpuclk_8625q_set_rate(int cpu, unsigned long rate,
 	if (reason == SETRATE_CPUFREQ)
 		mutex_lock(&drv_state.lock);
 
-	if ((drv_state.restart_config_done == STATE_SHUTDOWN_DONE) ||
-			(drv_state.restart_config_done ==
-			 STATE_SHUTDOWN_PREPARE && rate != SHUTDOWN_FREQ_KHZ)) {
-		pr_err("Frequency set to %d for shutdown, cannot reconfigure to %lu\n",
-				SHUTDOWN_FREQ_KHZ, rate);
-		rc = -EINVAL;
-		goto out;
-	}
-
-
 	strt_s = cur_s = drv_state.current_speed;
 
 	WARN_ONCE(cur_s == NULL, "%s: not initialized\n", __func__);
@@ -389,16 +370,6 @@ static int acpuclk_8625q_set_rate(int cpu, unsigned long rate,
 
 	if (strt_s->pll != ACPU_PLL_TCXO)
 		plls_enabled |= 1 << strt_s->pll;
-
-	/* Increase the AXI bus frequency if needed */
-	if (strt_s->axiclk_khz <= tgt_s->axiclk_khz) {
-		res = clk_set_rate(drv_state.ebi1_clk,
-				tgt_s->axiclk_khz * 1000);
-		pr_debug("AXI bus set freq %d\n",
-				tgt_s->axiclk_khz * 1000);
-		if (res < 0)
-			pr_warning("Setting AXI min rate failed (%d)\n", res);
-	}
 
 	if (reason == SETRATE_CPUFREQ) {
 		/* Increase VDD if needed. */
@@ -464,7 +435,6 @@ static int acpuclk_8625q_set_rate(int cpu, unsigned long rate,
 		plls_enabled |= 1 << tgt_s->pll;
 	}
 	acpuclk_set_div(tgt_s);
-	drv_state.prev_speed = drv_state.current_speed;
 	drv_state.current_speed = tgt_s;
 	pr_debug("The new clock speed is %u\n", tgt_s->a11clk_khz);
 	/* Re-adjust lpj for the new clock speed. */
@@ -480,8 +450,8 @@ static int acpuclk_8625q_set_rate(int cpu, unsigned long rate,
 	if (reason == SETRATE_SWFI)
 		goto out;
 
-	/* Decrease the AXI bus frequency if suitable */
-	if (strt_s->axiclk_khz > tgt_s->axiclk_khz) {
+	/* Change the AXI bus frequency if we can. */
+	if (strt_s->axiclk_khz != tgt_s->axiclk_khz) {
 		res = clk_set_rate(drv_state.ebi1_clk,
 				tgt_s->axiclk_khz * 1000);
 		pr_debug("AXI bus set freq %d\n",
@@ -509,29 +479,12 @@ static int acpuclk_8625q_set_rate(int cpu, unsigned long rate,
 		pr_debug("Decreased Vdd to %duV\n", tgt_s->vdd);
 	}
 
-	if (drv_state.restart_config_done == STATE_SHUTDOWN_PREPARE)
-		drv_state.restart_config_done = STATE_SHUTDOWN_DONE;
-
 	pr_debug("ACPU speed change complete\n");
 out:
 	if (reason == SETRATE_CPUFREQ)
 		mutex_unlock(&drv_state.lock);
 
 	return rc;
-}
-
-static void acpuclk_8625q_restart_config(struct platform_device *pdev)
-{
-	int rc;
-
-	drv_state.restart_config_done = STATE_SHUTDOWN_PREPARE;
-	rc = acpuclk_8625q_set_rate(0, SHUTDOWN_FREQ_KHZ, SETRATE_CPUFREQ);
-	if (rc) {
-		pr_err("Unable to set frequency to %dKhz\n", SHUTDOWN_FREQ_KHZ);
-		return;
-	}
-	pr_debug("%s: Current ACPU frequency %ld\n", __func__,
-			acpuclk_get_rate(0));
 }
 
 static int __devinit acpuclk_hw_init(void)
@@ -821,7 +774,7 @@ static int __init get_reg(void)
 		BUG_ON(res);
 	}
 
-	ext_vreg_handle = drv_state.vreg_cpu;
+	ncp6335d_handle = drv_state.vreg_cpu;
 
 	return 0;
 }
@@ -936,14 +889,12 @@ static int __devinit acpuclk_8625q_probe(struct platform_device *pdev)
 	}
 
 	drv_state.probe_success = true;
-	drv_state.restart_config_done = STATE_NORMAL;
 
 	return 0;
 }
 
 static struct platform_driver acpuclk_8625q_driver = {
 	.probe = acpuclk_8625q_probe,
-	.shutdown = acpuclk_8625q_restart_config,
 	.driver = {
 		.name = "acpuclock-8625q",
 		.owner = THIS_MODULE,

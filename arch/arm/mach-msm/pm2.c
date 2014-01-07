@@ -64,7 +64,9 @@
  * Debug Definitions
  *****************************************************************************/
 
+#if !defined(CONFIG_MACH_NEVIS3G) && !defined(CONFIG_MACH_NEVIS3G_REV03)
 void __iomem *virt_start_ptr;
+#endif
 
 enum {
 	MSM_PM_DEBUG_SUSPEND = BIT(0),
@@ -520,7 +522,9 @@ static void msm_pm_configure_top_csr(void)
 	/* Initialize all the SPM registers */
 	msm_spm_reinit();
 
+#if !defined(CONFIG_MACH_NEVIS3G) && !defined(CONFIG_MACH_NEVIS3G_REV03)
 	*(uint32_t *)(virt_start_ptr + 0x30) = 0x12;
+#endif
 
 	for_each_possible_cpu(cpu) {
 		/* skip for C0 */
@@ -563,7 +567,9 @@ static void msm_pm_configure_top_csr(void)
 		mb();
 	}
 
+#if !defined(CONFIG_MACH_NEVIS3G) && !defined(CONFIG_MACH_NEVIS3G_REV03)
 	*(uint32_t *)(virt_start_ptr + 0x30) = 0x13;
+#endif
 }
 
 /*
@@ -634,13 +640,9 @@ static void msm_pm_timeout(void)
 	printk(KERN_EMERG "%s(): resetting modem\n", __func__);
 	msm_proc_comm_reset_modem_now();
 #elif defined(CONFIG_MSM_PM_TIMEOUT_HALT)
+	panic("msm_pm_timeout()\n");
 	printk(KERN_EMERG "%s(): halting\n", __func__);
 #endif
-	/* Sending modem reset signal */
-	*(uint32_t *)(virt_start_ptr + 0x170) = 0x1;
-	smsm_change_state(SMSM_APPS_STATE, 0, SMSM_RESET);
-	*(uint32_t *)(virt_start_ptr + 0x170) = 0x2;
-
 	for (;;)
 		;
 }
@@ -713,7 +715,7 @@ static int msm_pm_poll_state(int nr_grps, struct msm_pm_polled_group *grps)
 {
 	int i, k;
 
-	for (i = 0; i < 50000; i++) {
+	for (i = 0; i < 1000000; i++) {
 		for (k = 0; k < nr_grps; k++) {
 			bool all_set, all_clear;
 			bool any_set, any_clear;
@@ -888,10 +890,10 @@ static int msm_pm_power_collapse
 	int val;
 	int modem_early_exit = 0;
 
-
 	/* clear C0 jump location */
 	*(uint32_t *)(virt_start_ptr + 0x40) = 0xBEEFDEAD;
 
+#if !defined(CONFIG_MACH_NEVIS3G) && !defined(CONFIG_MACH_NEVIS3G_REV03)
 	*(uint32_t *)(virt_start_ptr + 0x30) = 0x1;
 	/* This location tell us we are doing a PC */
 	*(uint32_t *)(virt_start_ptr + 0x34) = 0x1;
@@ -902,7 +904,7 @@ static int msm_pm_power_collapse
 	 */
 	*(uint32_t *)(virt_start_ptr + 0x50) = 0x0;
 	*(uint32_t *)(virt_start_ptr + 0x54) = 0x0;
-
+	
 	/*
 	 * Write known value to APPS PWRDOWN register
 	 */
@@ -917,6 +919,8 @@ static int msm_pm_power_collapse
 
 	/* Clear "reserved1" variable in msm_pm_smem_data */
 	msm_pm_smem_data->reserved1 = 0x0;
+
+#endif
 
 	MSM_PM_DPRINTK(MSM_PM_DEBUG_SUSPEND|MSM_PM_DEBUG_POWER_COLLAPSE,
 		KERN_INFO, "%s(): idle %d, delay %u, limit %u\n", __func__,
@@ -949,7 +953,9 @@ static int msm_pm_power_collapse
 	msm_sirc_enter_sleep();
 	msm_gpio_enter_sleep(from_idle);
 
+#if !defined(CONFIG_MACH_NEVIS3G) && !defined(CONFIG_MACH_NEVIS3G_REV03)
 	*(uint32_t *)(virt_start_ptr + 0x30) = 0x2;
+#endif
 
 	msm_pm_smem_data->sleep_time = sleep_delay;
 	msm_pm_smem_data->resources_used = sleep_limit;
@@ -989,7 +995,9 @@ static int msm_pm_power_collapse
 		goto power_collapse_early_exit;
 	}
 
+#if !defined(CONFIG_MACH_NEVIS3G) && !defined(CONFIG_MACH_NEVIS3G_REV03)
 	*(uint32_t *)(virt_start_ptr + 0x30) = 0x3;
+#endif
 
 	/* DEM Master in RSA */
 
@@ -1027,7 +1035,9 @@ static int msm_pm_power_collapse
 	msm_pm_boot_config_before_pc(smp_processor_id(),
 			virt_to_phys(msm_pm_collapse_exit));
 
+#if !defined(CONFIG_MACH_NEVIS3G) && !defined(CONFIG_MACH_NEVIS3G_REV03)
 	*(uint32_t *)(virt_start_ptr + 0x30) = 0x4;
+#endif
 
 #ifdef CONFIG_VFP
 	if (from_idle)
@@ -1041,12 +1051,15 @@ static int msm_pm_power_collapse
 		apps_power_collapse = 1;
 #endif
 
+#if !defined(CONFIG_MACH_NEVIS3G) && !defined(CONFIG_MACH_NEVIS3G_REV03)
 	*(uint32_t *)(virt_start_ptr + 0x30) = 0x5;
+#endif
 
 	collapsed = msm_pm_collapse();
 
+#if !defined(CONFIG_MACH_NEVIS3G) && !defined(CONFIG_MACH_NEVIS3G_REV03)
 	*(uint32_t *)(virt_start_ptr + 0x30) = 0xE;
-
+#endif
 
 	/*
 	 * TBD: Currently recognise the MODEM early exit
@@ -1073,6 +1086,7 @@ static int msm_pm_power_collapse
 						continue;
 					per_cpu(power_collapsed, cpu) = 1;
 				}
+
 				/*
 				 * override DBGNOPOWERDN and program the GDFS
 				 * count val
@@ -1088,6 +1102,7 @@ static int msm_pm_power_collapse
 						continue;
 					per_cpu(power_collapsed, cpu) = 1;
 				}
+
 				/*
 				 * override DBGNOPOWERDN and program the GDFS
 				 * count val
@@ -1099,7 +1114,9 @@ static int msm_pm_power_collapse
 		}
 	}
 
+#if !defined(CONFIG_MACH_NEVIS3G) && !defined(CONFIG_MACH_NEVIS3G_REV03)
 	*(uint32_t *)(virt_start_ptr + 0x30) = 0xF;
+#endif
 
 #ifdef CONFIG_CACHE_L2X0
 	if (!cpu_is_msm8625() && !cpu_is_msm8625q())
@@ -1108,7 +1125,9 @@ static int msm_pm_power_collapse
 		apps_power_collapse = 0;
 #endif
 
+#if !defined(CONFIG_MACH_NEVIS3G) && !defined(CONFIG_MACH_NEVIS3G_REV03)
 	*(uint32_t *)(virt_start_ptr + 0x30) = 0x10;
+#endif
 
 	msm_pm_boot_config_after_pc(smp_processor_id());
 
@@ -1127,8 +1146,9 @@ static int msm_pm_power_collapse
 		writel_relaxed(msm8x25q_ahb.cntl, A11S_CLK_CNTL_ADDR);
 		mb();
 	}
-
+#if !defined(CONFIG_MACH_NEVIS3G) && !defined(CONFIG_MACH_NEVIS3G_REV03)
 	*(uint32_t *)(virt_start_ptr + 0x30) = 0x11;
+#endif
 
 	MSM_PM_DPRINTK(MSM_PM_DEBUG_SUSPEND | MSM_PM_DEBUG_POWER_COLLAPSE,
 		KERN_INFO,
@@ -1148,7 +1168,9 @@ static int msm_pm_power_collapse
 
 	msm_pm_config_hw_after_power_up();
 
+#if !defined(CONFIG_MACH_NEVIS3G) && !defined(CONFIG_MACH_NEVIS3G_REV03)
 	*(uint32_t *)(virt_start_ptr + 0x30) = 0x14;
+#endif
 
 	MSM_PM_DEBUG_PRINT_STATE("msm_pm_power_collapse(): post power up");
 
@@ -1179,7 +1201,9 @@ static int msm_pm_power_collapse
 	/* Sanity check */
 	if (collapsed && !modem_early_exit) {
 		BUG_ON(!(state_grps[0].value_read & DEM_MASTER_SMSM_RSA));
+#if !defined(CONFIG_MACH_NEVIS3G) && !defined(CONFIG_MACH_NEVIS3G_REV03)
 		*(uint32_t *)(virt_start_ptr + 0x30) = 0x15;
+#endif
 	} else {
 		BUG_ON(!(state_grps[0].value_read &
 			DEM_MASTER_SMSM_PWRC_EARLY_EXIT));
@@ -1218,14 +1242,18 @@ static int msm_pm_power_collapse
 		goto power_collapse_restore_gpio_bail;
 	}
 
+#if !defined(CONFIG_MACH_NEVIS3G) && !defined(CONFIG_MACH_NEVIS3G_REV03)
 	*(uint32_t *)(virt_start_ptr + 0x30) = 0x16;
+#endif
 
 	/* DEM Master == RUN */
 
 	MSM_PM_DEBUG_PRINT_STATE("msm_pm_power_collapse(): WFPI RUN");
 	MSM_PM_DEBUG_PRINT_SLEEP_INFO();
 
+#if !defined(CONFIG_MACH_NEVIS3G) && !defined(CONFIG_MACH_NEVIS3G_REV03)
 	*(uint32_t *)(virt_start_ptr + 0x30) = 0x17;
+#endif
 
 	msm_pm_irq_extns->exit_sleep2(msm_pm_smem_data->irq_mask,
 		msm_pm_smem_data->wakeup_reason,
@@ -1236,7 +1264,9 @@ static int msm_pm_power_collapse
 	msm_gpio_exit_sleep();
 	msm_sirc_exit_sleep();
 
+#if !defined(CONFIG_MACH_NEVIS3G) && !defined(CONFIG_MACH_NEVIS3G_REV03)
 	*(uint32_t *)(virt_start_ptr + 0x30) = 0x18;
+#endif
 
 	smsm_change_state(SMSM_APPS_DEM,
 		DEM_SLAVE_SMSM_WFPI, DEM_SLAVE_SMSM_RUN);
@@ -1245,7 +1275,9 @@ static int msm_pm_power_collapse
 
 	smd_sleep_exit();
 
+#if !defined(CONFIG_MACH_NEVIS3G) && !defined(CONFIG_MACH_NEVIS3G_REV03)
 	*(uint32_t *)(virt_start_ptr + 0x30) = 0x19;
+#endif
 
 	if (cpu_is_msm8625() || cpu_is_msm8625q()) {
 		ret = msm_spm_set_low_power_mode(MSM_SPM_MODE_CLOCK_GATING,
@@ -1256,12 +1288,18 @@ static int msm_pm_power_collapse
 	if (msm_cpr_ops)
 		msm_cpr_ops->cpr_resume();
 
+#if !defined(CONFIG_MACH_NEVIS3G) && !defined(CONFIG_MACH_NEVIS3G_REV03)
 	*(uint32_t *)(virt_start_ptr + 0x30) = 0x20;
 	*(uint32_t *)(virt_start_ptr + 0x34) = 0x0;
+#endif
+
 	return 0;
 
 power_collapse_early_exit:
+
+#if !defined(CONFIG_MACH_NEVIS3G) && !defined(CONFIG_MACH_NEVIS3G_REV03)	
 	*(uint32_t *)(virt_start_ptr + 0x30) = 0x21;
+#endif
 	/* Enter PWRC_EARLY_EXIT */
 
 	smsm_change_state(SMSM_APPS_DEM,
@@ -1298,7 +1336,10 @@ power_collapse_early_exit:
 	ret = -EAGAIN;
 
 power_collapse_restore_gpio_bail:
+#if !defined(CONFIG_MACH_NEVIS3G) && !defined(CONFIG_MACH_NEVIS3G_REV03)
 	*(uint32_t *)(virt_start_ptr + 0x30) = 0x22;
+#endif
+
 	msm_gpio_exit_sleep();
 	msm_sirc_exit_sleep();
 
@@ -1309,7 +1350,9 @@ power_collapse_restore_gpio_bail:
 
 	MSM_PM_DEBUG_PRINT_STATE("msm_pm_power_collapse(): RUN");
 
+#if !defined(CONFIG_MACH_NEVIS3G) && !defined(CONFIG_MACH_NEVIS3G_REV03)
 	*(uint32_t *)(virt_start_ptr + 0x30) = 0x23;
+#endif
 
 	if (collapsed)
 		smd_sleep_exit();
@@ -1317,7 +1360,9 @@ power_collapse_restore_gpio_bail:
 	if (msm_cpr_ops)
 		msm_cpr_ops->cpr_resume();
 
+#if !defined(CONFIG_MACH_NEVIS3G) && !defined(CONFIG_MACH_NEVIS3G_REV03)
 	*(uint32_t *)(virt_start_ptr + 0x30) = 0x24;
+#endif
 
 	if (cpu_is_msm8625() || cpu_is_msm8625q()) {
 		ret = msm_spm_set_low_power_mode(MSM_SPM_MODE_CLOCK_GATING,
@@ -1326,8 +1371,10 @@ power_collapse_restore_gpio_bail:
 	}
 
 power_collapse_bail:
+#if !defined(CONFIG_MACH_NEVIS3G) && !defined(CONFIG_MACH_NEVIS3G_REV03)
 	*(uint32_t *)(virt_start_ptr + 0x30) = 0x25;
 	*(uint32_t *)(virt_start_ptr + 0x34) = 0x0;
+#endif	
 	return ret;
 }
 
@@ -1349,6 +1396,7 @@ static int __ref msm_pm_power_collapse_standalone(bool from_idle)
 
 	cpu = smp_processor_id();
 
+#if !defined(CONFIG_MACH_NEVIS3G) && !defined(CONFIG_MACH_NEVIS3G_REV03)
 	switch (cpu) {
 	case 0:
 		/*
@@ -1438,6 +1486,7 @@ static int __ref msm_pm_power_collapse_standalone(bool from_idle)
 		*(uint32_t *)(virt_start_ptr + 0x4C) = 0xDEADBEEF;
 		break;
 	}
+#endif
 
 	ret = msm_spm_set_low_power_mode(MSM_SPM_MODE_POWER_COLLAPSE, false);
 	WARN_ON(ret);
@@ -1457,6 +1506,7 @@ static int __ref msm_pm_power_collapse_standalone(bool from_idle)
 		l2cc_suspend();
 #endif
 
+#if !defined(CONFIG_MACH_NEVIS3G) && !defined(CONFIG_MACH_NEVIS3G_REV03)
 	switch (cpu) {
 	case 0:
 		*(uint32_t *)(virt_start_ptr + 0x10) = 0x2;
@@ -1471,9 +1521,11 @@ static int __ref msm_pm_power_collapse_standalone(bool from_idle)
 		*(uint32_t *)(virt_start_ptr + 0x1C) = 0x2;
 		break;
 	}
+#endif
 
 	collapsed = msm_pm_collapse();
 
+#if !defined(CONFIG_MACH_NEVIS3G) && !defined(CONFIG_MACH_NEVIS3G_REV03)
 	switch (cpu) {
 	case 0:
 		*(uint32_t *)(virt_start_ptr + 0x10) = 0xB;
@@ -1488,6 +1540,7 @@ static int __ref msm_pm_power_collapse_standalone(bool from_idle)
 		*(uint32_t *)(virt_start_ptr + 0x1C) = 0xB;
 		break;
 	}
+#endif
 
 #ifdef CONFIG_CACHE_L2X0
 	if (!cpu_is_msm8625() && !cpu_is_msm8625q())
@@ -1511,6 +1564,7 @@ static int __ref msm_pm_power_collapse_standalone(bool from_idle)
 	ret = msm_spm_set_low_power_mode(MSM_SPM_MODE_CLOCK_GATING, false);
 	WARN_ON(ret);
 
+#if !defined(CONFIG_MACH_NEVIS3G) && !defined(CONFIG_MACH_NEVIS3G_REV03)
 	switch (cpu) {
 	case 0:
 		*(uint32_t *)(virt_start_ptr + 0x10) = 0xC;
@@ -1529,6 +1583,7 @@ static int __ref msm_pm_power_collapse_standalone(bool from_idle)
 		*(uint32_t *)(virt_start_ptr + 0x2C) = 0x0;
 		break;
 	}
+#endif
 
 	return !collapsed;
 }
@@ -1543,6 +1598,7 @@ static int __ref msm_pm_power_collapse_standalone(bool from_idle)
 static int msm_pm_swfi(bool ramp_acpu)
 {
 	unsigned long saved_acpuclk_rate = 0;
+	int ret;
 
 	if (ramp_acpu) {
 		saved_acpuclk_rate = acpuclk_wait_for_irq();
@@ -1553,6 +1609,9 @@ static int msm_pm_swfi(bool ramp_acpu)
 		if (!saved_acpuclk_rate)
 			return -EIO;
 	}
+
+	ret = msm_spm_set_low_power_mode(MSM_SPM_MODE_CLOCK_GATING, false);
+	WARN_ON(ret);
 
 	if (!cpu_is_msm8625() && !cpu_is_msm8625q())
 		msm_pm_config_hw_before_swfi();
@@ -1962,6 +2021,10 @@ static int __init msm_pm_init(void)
 		clean_caches((unsigned long)&target_type, sizeof(target_type),
 				virt_to_phys(&target_type));
 
+		nop_size = 5000;
+		clean_caches((unsigned long)&nop_size, sizeof(nop_size),
+				virt_to_phys(&nop_size));
+
 		/*
 		 * Configure the MPA5_GDFS_CNT_VAL register for
 		 * DBGPWRUPEREQ_OVERRIDE[19:16] = Override the
@@ -1977,15 +2040,19 @@ static int __init msm_pm_init(void)
 		__raw_writel(val, (MSM_CFG_CTL_BASE + 0x38));
 
 		l2x0_base_addr = MSM_L2CC_BASE;
-		spm0_base_addr = MSM_SAW0_BASE;
+
+ 		spm0_base_addr = MSM_SAW0_BASE;
 		spm1_base_addr = MSM_SAW1_BASE;
 		spm2_base_addr = MSM_SAW2_BASE;
 		spm3_base_addr = MSM_SAW3_BASE;
+		apps_pwr_dwn   = APPS_PWRDOWN;
+ 
 	}
 
-	apps_pwr_dwn   = APPS_PWRDOWN;
+#if !defined(CONFIG_MACH_NEVIS3G) && !defined(CONFIG_MACH_NEVIS3G_REV03)
 	idle_v7_start_ptr = virt_start_ptr;
 	pm_write_smem_data = (void *)msm_pm_smem_data;
+#endif
 
 #ifdef CONFIG_MSM_MEMORY_LOW_POWER_MODE
 	/* The wakeup_reason field is overloaded during initialization time
@@ -2000,7 +2067,9 @@ static int __init msm_pm_init(void)
 
 	suspend_set_ops(&msm_pm_ops);
 
-	msm_pm_mode_sysfs_add();
+	ret=msm_pm_mode_sysfs_add();
+	if(ret<0)
+		return ret;
 	msm_pm_add_stats(enable_stats, ARRAY_SIZE(enable_stats));
 
 	atomic_set(&msm_pm_init_done, 1);

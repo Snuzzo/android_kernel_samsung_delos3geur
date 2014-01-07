@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2013, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2013, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -773,17 +773,13 @@ static void fix_sizes(void)
 
 	if (get_ddr_size() > SZ_512M)
 		pmem_adsp_size = CAMERA_ZSL_SIZE;
-
 #ifdef CONFIG_ION_MSM
+	msm_ion_camera_size = pmem_adsp_size;
 	msm_ion_audio_size = MSM_PMEM_AUDIO_SIZE;
 	msm_ion_sf_size = pmem_mdp_size;
 #ifdef CONFIG_CMA
-        if (get_ddr_size() > SZ_256M)
-                pmem_adsp_size = CAMERA_ZSL_SIZE;
-	msm_ion_camera_size = pmem_adsp_size;
 	msm_ion_camera_size_carving = 0;
 #else
-	msm_ion_camera_size = pmem_adsp_size;
 	msm_ion_camera_size_carving = msm_ion_camera_size;
 #endif
 #endif
@@ -980,7 +976,7 @@ static void __init msm7x27a_reserve(void)
 			&ion_cma_device.dev,
 			msm_ion_camera_size,
 			CAMERA_HEAP_BASE,
-			0x26000000);
+			0xa0000000);
 #endif
 }
 

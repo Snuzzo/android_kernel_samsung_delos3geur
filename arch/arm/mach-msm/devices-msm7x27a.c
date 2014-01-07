@@ -1,4 +1,4 @@
-/* Copyright (c) 2011-2012, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2011-2012, Code Aurora Forum. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -42,6 +42,8 @@
 #include "pm.h"
 #include "msm_cpr.h"
 #include "msm_smem_iface.h"
+
+#include <mach/msm_serial_pdata.h>
 
 /* Address of GSBI blocks */
 #define MSM_GSBI0_PHYS		0xA1200000
@@ -367,11 +369,93 @@ static struct resource resources_uart1[] = {
 	},
 };
 
+#ifdef CONFIG_SUPPORT_FLASHLESS_CP
+extern unsigned int board_hw_revision;
+static int msm_uart1b_gpio_config(int onoff)
+{
+	struct msm_gpio uart1_b_on_config_data[] = {
+		{GPIO_CFG(45, 2, GPIO_CFG_INPUT,  GPIO_CFG_PULL_UP, GPIO_CFG_2MA), "UART1DM_Rx"},
+		{GPIO_CFG(46, 2, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_UP, GPIO_CFG_2MA), "UART1DM_Tx"},
+
+		{GPIO_CFG(122, 2, GPIO_CFG_INPUT,  GPIO_CFG_PULL_UP, GPIO_CFG_2MA), "UART1_Rx_b"},
+		{GPIO_CFG(123, 2, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_UP, GPIO_CFG_2MA), "UART1_Tx_b"},
+	};
+
+	if (onoff)	{
+#if defined(CONFIG_MACH_TORINO_CTC)		
+		if (board_hw_revision >= 3)	{
+			/* UART1_B ON */
+			msm_gpios_request_enable(uart1_b_on_config_data, ARRAY_SIZE(uart1_b_on_config_data));
+		}
+#elif defined(CONFIG_MACH_TREBONDUOS_CTC)
+		/* UART1_B ON */
+		msm_gpios_request_enable(uart1_b_on_config_data, ARRAY_SIZE(uart1_b_on_config_data));
+#endif
+	}
+
+	printk(KERN_ERR "UART1_B gpio_config: %d\n", onoff);
+	return 0;
+}
+
+static struct msm_serial_platform_data msm_uart1b_pdata = {
+	.use_console	= 0,
+	.gpio_config	= msm_uart1b_gpio_config,
+};
+#endif
+
+
+
+#if defined(CONFIG_SERIAL_MSM_UART_WAKEUP_BY_GPIO) && defined(CONFIG_MACH_ROY_DTV) //sjinu 2013.01.25 uart wake up by gpio
+
+#ifndef GPIO_UART_RXD_WAKEUP
+ #if (!defined(CONFIG_MACH_ROY_DTV_HWREV)) || (CONFIG_MACH_ROY_DTV_HWREV==0x0)
+  #define GPIO_UART_RXD_WAKEUP 114
+ #else
+  #define GPIO_UART_RXD_WAKEUP 38
+ #endif
+#endif // GPIO_UART_RXD_WAKEUP
+
+static struct msm_serial_platform_data msm_uart1_rxwakeup_pdata = {
+	.wakeup_irq = MSM_GPIO_TO_INT(GPIO_UART_RXD_WAKEUP),
+	.inject_rx_on_wakeup= 0,
+	.rx_to_inject=0,
+};
+#endif
+
 struct platform_device msm_device_uart1 = {
 	.name	= "msm_serial",
 	.id	= 0,
 	.num_resources	= ARRAY_SIZE(resources_uart1),
 	.resource	= resources_uart1,
+#if defined(CONFIG_SERIAL_MSM_UART_WAKEUP_BY_GPIO) && defined(CONFIG_MACH_ROY_DTV)
+	.dev	= {
+		.platform_data = &msm_uart1_rxwakeup_pdata,
+	},
+#elif defined(CONFIG_SUPPORT_FLASHLESS_CP)
+	.dev	= {
+		.platform_data = &msm_uart1b_pdata,
+	},
+#endif
+};
+
+static struct resource resources_uart3[] = {
+	{
+		.start	= INT_UART3,
+		.end	= INT_UART3,
+		.flags	= IORESOURCE_IRQ,
+	},
+	{
+		.start	= MSM7XXX_UART3_PHYS,
+		.end	= MSM7XXX_UART3_PHYS + MSM7XXX_UART3_SIZE - 1,
+		.flags	= IORESOURCE_MEM,
+	},
+};
+
+struct platform_device msm_device_uart3 = {
+	.name	= "msm_serial",
+	.id	= 2,
+	.num_resources	= ARRAY_SIZE(resources_uart3),
+	.resource	= resources_uart3,
 };
 
 #define MSM_UART1DM_PHYS      0xA0200000
@@ -430,6 +514,12 @@ static struct resource msm_uart2dm_resources[] = {
 		.end	= INT_UART2DM_IRQ,
 		.flags	= IORESOURCE_IRQ,
 	},
+	{
+		.start = 114,	/* UART_RX */
+		.end   = 114,
+		.name  = "wakeup_gpio",
+		.flags = IORESOURCE_IO,
+	},	
 };
 
 struct platform_device msm_device_uart_dm2 = {
@@ -816,29 +906,29 @@ static struct msm_spm_seq_entry msm_spm_seq_list[] __initdata = {
 static struct msm_spm_platform_data msm_spm_data[] __initdata = {
 	[0] = {
 		.reg_base_addr = MSM_SAW0_BASE,
-		.reg_init_values[MSM_SPM_REG_SAW2_CFG] = 0x0,
-		.reg_init_values[MSM_SPM_REG_SAW2_SPM_CTL] = 0x01,
+		.reg_init_values[MSM_SPM_REG_SAW2_CFG] = 0xF,
+		.reg_init_values[MSM_SPM_REG_SAW2_SPM_CTL] = 0x09,
 		.num_modes = ARRAY_SIZE(msm_spm_seq_list),
 		.modes = msm_spm_seq_list,
 	},
 	[1] = {
 		.reg_base_addr = MSM_SAW1_BASE,
-		.reg_init_values[MSM_SPM_REG_SAW2_CFG] = 0x0,
-		.reg_init_values[MSM_SPM_REG_SAW2_SPM_CTL] = 0x01,
+		.reg_init_values[MSM_SPM_REG_SAW2_CFG] = 0xF,
+		.reg_init_values[MSM_SPM_REG_SAW2_SPM_CTL] = 0x09,
 		.num_modes = ARRAY_SIZE(msm_spm_seq_list),
 		.modes = msm_spm_seq_list,
 	},
 	[2] = {
 		.reg_base_addr = MSM_SAW2_BASE,
-		.reg_init_values[MSM_SPM_REG_SAW2_CFG] = 0x0,
-		.reg_init_values[MSM_SPM_REG_SAW2_SPM_CTL] = 0x01,
+		.reg_init_values[MSM_SPM_REG_SAW2_CFG] = 0xF,
+		.reg_init_values[MSM_SPM_REG_SAW2_SPM_CTL] = 0x09,
 		.num_modes = ARRAY_SIZE(msm_spm_seq_list),
 		.modes = msm_spm_seq_list,
 	},
 	[3] = {
 		.reg_base_addr = MSM_SAW3_BASE,
-		.reg_init_values[MSM_SPM_REG_SAW2_CFG] = 0x0,
-		.reg_init_values[MSM_SPM_REG_SAW2_SPM_CTL] = 0x01,
+		.reg_init_values[MSM_SPM_REG_SAW2_CFG] = 0xF,
+		.reg_init_values[MSM_SPM_REG_SAW2_SPM_CTL] = 0x09,
 		.num_modes = ARRAY_SIZE(msm_spm_seq_list),
 		.modes = msm_spm_seq_list,
 	},
@@ -961,8 +1051,8 @@ void __init msm7x25a_kgsl_3d0_init(void)
 
 void __init msm8x25_kgsl_3d0_init(void)
 {
-	kgsl_3d0_pdata.idle_timeout = HZ/5;
-	kgsl_3d0_pdata.strtstp_sleepwake = false;
+		kgsl_3d0_pdata.idle_timeout = HZ/5;
+		kgsl_3d0_pdata.strtstp_sleepwake = false;
 
 	if (cpu_is_msm8625()) {
 		if (SOCINFO_VERSION_MAJOR(socinfo_get_version()) >= 2)
@@ -1033,6 +1123,8 @@ struct platform_device led_pdev = {
 	},
 };
 
+extern unsigned int kernel_uart_flag;
+
 struct platform_device asoc_msm_pcm = {
 	.name   = "msm-dsp-audio",
 	.id     = 0,
@@ -1086,11 +1178,43 @@ static struct resource msm8625_resources_uart1[] = {
 	},
 };
 
+
+#ifdef CONFIG_SUPPORT_FLASHLESS_CP
+static int msm8625_uart1b_gpio_config(int onoff)
+{
+	struct msm_gpio uart1_b_on_config_data[] = {
+		{GPIO_CFG(122, 2, GPIO_CFG_INPUT,  GPIO_CFG_PULL_UP, GPIO_CFG_2MA), "UART1_Rx_b"},
+		{GPIO_CFG(123, 2, GPIO_CFG_OUTPUT, GPIO_CFG_PULL_UP, GPIO_CFG_2MA), "UART1_Tx_b"},
+	};
+
+	if (onoff)	{
+		/* UART1_B ON */
+		msm_gpios_request_enable(uart1_b_on_config_data, ARRAY_SIZE(uart1_b_on_config_data));
+
+	}
+
+	printk(KERN_ERR "UART1_B gpio_config: %d\n", onoff);
+	return 0;
+}
+
+static struct msm_serial_platform_data msm8625_uart1b_pdata = {
+	.use_console	= 0,
+	.gpio_config	= msm8625_uart1b_gpio_config,
+};
+#endif
+
+
 struct platform_device msm8625_device_uart1 = {
 	.name		= "msm_serial",
 	.id		= 0,
 	.num_resources	= ARRAY_SIZE(msm8625_resources_uart1),
 	.resource	= msm8625_resources_uart1,
+
+#ifdef CONFIG_SUPPORT_FLASHLESS_CP
+	.dev	= {
+		.platform_data = &msm8625_uart1b_pdata,
+	},
+#endif
 };
 
 static struct resource msm8625_uart1_dm_resources[] = {
@@ -1146,6 +1270,21 @@ static struct resource msm8625_uart2dm_resources[] = {
 		.end	= MSM8625_INT_UART2DM_IRQ,
 		.flags	= IORESOURCE_IRQ,
 	},
+#ifdef CONFIG_MACH_KYLEPLUS_CTC
+	{
+		.start = 86,	/* UART_RX	*/
+		.end   = 86,
+		.name  = "wakeup_gpio",
+		.flags = IORESOURCE_IO,
+	},	
+#else
+	{
+		.start = 114,	/* UART_RX */
+		.end   = 114,
+		.name  = "wakeup_gpio",
+		.flags = IORESOURCE_IO,
+	},
+#endif
 };
 
 struct platform_device msm8625_device_uart_dm2 = {
@@ -1752,25 +1891,25 @@ static uint32_t msm_c2_pmic_mv[] __initdata = {
  * This data will be based on CPR mode of operation
  */
 static struct msm_cpr_mode msm_cpr_mode_data = {
-	.ring_osc_data = {
-			{0, },
-			{0, },
-			{0, },
-			{0, },
-			{0, },
-			{0, },
-			{0, },
-			{0, },
-		},
-	.ring_osc = 0,
-	.step_quot = ~0,
+			.ring_osc_data = {
+				{0, },
+				{0, },
+				{0, },
+				{0, },
+				{0, },
+				{0, },
+				{0, },
+				{0, },
+			},
+			.ring_osc = 0,
+			.step_quot = ~0,
 	.step_div = 1,
-	.tgt_volt_offset = 0,
-	.turbo_Vmax = 1350000,
-	.turbo_Vmin = 1150000,
-	.nom_Vmax = 1350000,
-	.nom_Vmin = 1150000,
-	.calibrated_uV = 1300000,
+			.tgt_volt_offset = 0,
+			.turbo_Vmax = 1350000,
+			.turbo_Vmin = 1150000,
+			.nom_Vmax = 1350000,
+			.nom_Vmin = 1150000,
+			.calibrated_uV = 1300000,
 };
 
 static uint32_t
@@ -1797,8 +1936,8 @@ static void msm_cpr_clk_enable(void)
 	if(cpu_is_msm8625q()) {
 		writel_relaxed(0x1, RBCPR_SW_RESET_N_8625Q);
 	} else {
-		writel_relaxed(0x1, RBCPR_SW_RESET_N);
-	}
+	writel_relaxed(0x1, RBCPR_SW_RESET_N);
+}
 }
 
 static void msm_cpr_reset(void)
@@ -1884,6 +2023,12 @@ static void __init msm_cpr_init(void)
 	 * This formula is used since available fuse bits in the chip are not
 	 * enough to represent the value of maximum quot
 	 */
+	if (msm8625_cpu_id() == MSM8625A)	{
+		pr_info("%s: cpr: ori_turbo_quot: 0x%x\n", __func__, cpr_info->turbo_quot);
+
+		if(cpr_info->turbo_quot <= 0x3E)
+			cpr_info->turbo_quot = 0x3E;
+	}
 	msm_cpr_pdata.max_quot = cpr_info->turbo_quot * 10 + 600;
 	/**
 	 * Fused Quot value for 1.2GHz on a 1.2GHz part is lower than
@@ -1902,46 +2047,66 @@ static void __init msm_cpr_init(void)
 			msm_cpr_pdata.max_quot = 1350;
 	}
 
-	if (cpu_is_msm8625q()) {
-		msm_cpr_mode_data.nom_Vmin = 950000;
-		msm_cpr_mode_data.turbo_Vmin = 1100000;
-	} else {
-		if ((cpr_info->floor_fuse & 0x3) == 0x0) {
-			msm_cpr_mode_data.nom_Vmin = 1000000;
-			msm_cpr_mode_data.turbo_Vmin = 1100000;
-		} else if ((cpr_info->floor_fuse & 0x3) == 0x1) {
-			msm_cpr_mode_data.nom_Vmin = 1050000;
-			msm_cpr_mode_data.turbo_Vmin = 1100000;
-		} else if ((cpr_info->floor_fuse & 0x3) == 0x2) {
-			msm_cpr_mode_data.nom_Vmin = 1100000;
-			msm_cpr_mode_data.turbo_Vmin = 1100000;
-		}
-	}
-
-	pr_debug("%s: cpr: ring_osc: 0x%x\n", __func__,
-		msm_cpr_mode_data.ring_osc);
-	pr_info("%s: cpr: turbo_quot: 0x%x\n", __func__, cpr_info->turbo_quot);
-	pr_info("%s: cpr: pvs_fuse: 0x%x\n", __func__, cpr_info->pvs_fuse);
-	pr_info("%s: cpr: floor_fuse: 0x%x\n", __func__, cpr_info->floor_fuse);
-
-	if ((msm8625_cpu_id() == MSM8625A) || cpu_is_msm8625q())
-		msm_cpr_pdata.max_freq = 1209600;
-	else if (msm8625_cpu_id() == MSM8625) {
-		msm_cpr_pdata.max_freq = 1008000;
-		if ((cpr_info->floor_fuse & 0x3) == 0x3) {
-			msm_cpr_mode_data.nom_Vmin = 1175000;
-			msm_cpr_mode_data.turbo_Vmin = 1200000;
-		}
-	}
 	/**
 	 * Bits 4:0 of pvs_fuse provide mapping to the safe boot up voltage.
 	 * Boot up mode is by default Turbo.
 	 */
 	msm_cpr_mode_data.calibrated_uV =
-		(msm_c2_pmic_mv[cpr_info->pvs_fuse & 0x1F]
-			> msm_cpr_mode_data.turbo_Vmin
-		? msm_c2_pmic_mv[cpr_info->pvs_fuse & 0x1F]
-		: msm_cpr_mode_data.turbo_Vmin);
+				msm_c2_pmic_mv[cpr_info->pvs_fuse & 0x1F];
+
+#if 0 //qualcom recommend modify CPR vmin values.
+	if (cpu_is_msm8625q()) {
+		msm_cpr_mode_data.nom_Vmin = 950000;
+		msm_cpr_mode_data.turbo_Vmin = 1100000;
+	} else {
+	if ((cpr_info->floor_fuse & 0x3) == 0x0) {
+			msm_cpr_mode_data.nom_Vmin = 1000000;
+			msm_cpr_mode_data.turbo_Vmin = 1100000;
+	} else if ((cpr_info->floor_fuse & 0x3) == 0x1) {
+			msm_cpr_mode_data.nom_Vmin = 1050000;
+			msm_cpr_mode_data.turbo_Vmin = 1100000;
+	} else if ((cpr_info->floor_fuse & 0x3) == 0x2) {
+			msm_cpr_mode_data.nom_Vmin = 1100000;
+			msm_cpr_mode_data.turbo_Vmin = 1100000;
+	}
+#else
+	if (cpu_is_msm8625q()) {
+		msm_cpr_mode_data.nom_Vmin = 1025000;
+		msm_cpr_mode_data.turbo_Vmin = 1150000;
+	} else {
+		if ((cpr_info->floor_fuse & 0x3) == 0x0) {
+			msm_cpr_mode_data.nom_Vmin = 1050000;
+			msm_cpr_mode_data.turbo_Vmin = 1125000;
+		} else if ((cpr_info->floor_fuse & 0x3) == 0x1) {
+			msm_cpr_mode_data.nom_Vmin = 1100000;
+			msm_cpr_mode_data.turbo_Vmin = 1125000;
+		} else if ((cpr_info->floor_fuse & 0x3) == 0x2) {
+			msm_cpr_mode_data.nom_Vmin = 1125000;
+			msm_cpr_mode_data.turbo_Vmin = 1125000;
+		} else {
+			if (msm8625_cpu_id() == MSM8625A) { //case floor fuse val==0x03 and 8x25A
+					msm_cpr_mode_data.turbo_Vmin = 122500;
+					msm_cpr_mode_data.nom_Vmin = 1225000;
+			}
+		}
+	}
+
+#endif
+
+
+	pr_info("%s: cpr: ring_osc: 0x%x\n", __func__,
+		msm_cpr_mode_data.ring_osc);
+	pr_info("%s: cpr: turbo_quot: 0x%x\n", __func__, cpr_info->turbo_quot);
+	pr_info("%s: cpr: pvs_fuse: 0x%x\n", __func__, cpr_info->pvs_fuse);
+	pr_info("%s: cpr: floor_fuse: 0x%x\n", __func__, cpr_info->floor_fuse);
+	kfree(cpr_info);
+
+	if ((msm8625_cpu_id() == MSM8625A) || cpu_is_msm8625q())
+		msm_cpr_pdata.max_freq = 1209600;
+	else if (msm8625_cpu_id() == MSM8625) {
+		msm_cpr_pdata.max_freq = 1008000;
+		msm_cpr_mode_data.turbo_Vmin = 1175000;
+	}
 
 	pr_info("%s: cpr: nom_Vmin: %d, turbo_Vmin: %d\n", __func__,
 		msm_cpr_mode_data.nom_Vmin,
@@ -1949,49 +2114,26 @@ static void __init msm_cpr_init(void)
 	pr_info("%s: cpr: nom_Vmax: %d, turbo_Vmax: %d\n", __func__,
 		msm_cpr_mode_data.nom_Vmax,
 		msm_cpr_mode_data.turbo_Vmax);
-	pr_info("%s: cpr: calibrated_uV: %d\n", __func__,
-		msm_cpr_mode_data.calibrated_uV);
 
-	kfree(cpr_info);
+	if (machine_is_qrd_skud_prime() || cpu_is_msm8625q()) {
+		msm_cpr_pdata.step_size = 6250;
+		msm_cpr_mode_data.step_div = 2;
+		msm_cpr_pdata.dn_threshold = 5;
+	}
 
 	if (cpu_is_msm8625())
-		platform_device_register(&msm8625_vp_device);
+	platform_device_register(&msm8625_vp_device);
 
 	platform_device_register(&msm8625_device_cpr);
 }
 
-static struct resource pbus_resources[] = {
-{
-		.name   = "pbus_phys_addr",
-		.start  = MSM7XXX_PBUS_PHYS,
-		.end    = MSM7XXX_PBUS_PHYS + SZ_4K - 1,
-		.flags  = IORESOURCE_MEM,
-	},
-	{
-		.name	= "pbus_intr",
-		.start	= INT_PBUS_ARM11,
-		.flags	= IORESOURCE_IRQ,
-	},
-};
-
-struct platform_device msm_device_pbus = {
-	.name           = "msm_pbus",
-	.num_resources  = ARRAY_SIZE(pbus_resources),
-	.resource       = pbus_resources,
-};
-
-static void __init msm_pbus_init(void)
-{
-	if (cpu_is_msm8625() || cpu_is_msm8625q())
-		pbus_resources[1].start = MSM8625_INT_PBUS_ARM11;
-	platform_device_register(&msm_device_pbus);
-}
-
+#if !defined(CONFIG_MACH_NEVIS3G) && !defined(CONFIG_MACH_NEVIS3G_REV03)
 static void __init msm_pm_memory_reserve(void)
 {
 	virt_start_ptr = ioremap_nocache(MSM8625_NON_CACHE_MEM, SZ_2K);
 	memset(virt_start_ptr, 0x0, SZ_2K);
 }
+#endif
 
 static struct clk_lookup msm_clock_8625_dummy[] = {
 	CLK_DUMMY("core_clk",		adm_clk.c,	"msm_dmov", 0),
@@ -2122,8 +2264,14 @@ int __init msm7x2x_misc_init(void)
 		return 0;
 	}
 
-
-	msm_clock_init(&msm7x27a_clock_init_data);
+	if (!kernel_uart_flag){	
+		msm_clock_init(&msm7x27a_clock_init_data);
+	}
+	else
+	{
+		msm_clock_init(&msm7x27a_clock_init_data_except_uart3);
+	}
+	
 	if (cpu_is_msm7x27aa() || cpu_is_msm7x25ab())
 		platform_device_register(&msm7x27aa_device_acpuclk);
 	else if (cpu_is_msm8625q()) {
@@ -2147,7 +2295,9 @@ int __init msm7x2x_misc_init(void)
 	/*
 	 * Remove the memory block @ 0xFC00000 to log debug information
 	 */
+#if !defined(CONFIG_MACH_NEVIS3G) && !defined(CONFIG_MACH_NEVIS3G_REV03)
 	msm_pm_memory_reserve();
+#endif
 
 	if (cpu_is_msm8625q() || (cpu_is_msm8625() &&
 			(SOCINFO_VERSION_MAJOR(socinfo_get_version()) >= 2)))
@@ -2158,7 +2308,6 @@ int __init msm7x2x_misc_init(void)
 
 	platform_device_register(&pl310_erp_device);
 
-	msm_pbus_init();
 	if (msm_gpio_config_gps() < 0)
 		pr_err("Error for gpio config for GPS gpio\n");
 
