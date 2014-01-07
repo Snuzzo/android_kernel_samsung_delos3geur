@@ -1,6 +1,6 @@
 /*
    BlueZ - Bluetooth protocol stack for Linux
-   Copyright (c) 2000-2001, 2010-2012 The Linux Foundation.  All rights reserved.
+   Copyright (c) 2000-2001, 2010-2012 Code Aurora Forum.  All rights reserved.
 
    Written 2000,2001 by Maxim Krasnyansky <maxk@qualcomm.com>
 
@@ -120,12 +120,6 @@ static void hci_le_connect_cancel(struct hci_conn *conn)
 {
 	hci_send_cmd(conn->hdev, HCI_OP_LE_CREATE_CONN_CANCEL, 0, NULL);
 }
-static inline bool is_role_switch_possible(struct hci_dev *hdev)
-{
-	if (hci_conn_hash_lookup_state(hdev, ACL_LINK, BT_CONNECTED))
-		return false;
-	return true;
-}
 
 void hci_acl_connect(struct hci_conn *conn)
 {
@@ -162,8 +156,7 @@ void hci_acl_connect(struct hci_conn *conn)
 	}
 
 	cp.pkt_type = cpu_to_le16(conn->pkt_type);
-	if (lmp_rswitch_capable(hdev) && !(hdev->link_mode & HCI_LM_MASTER)
-		&& is_role_switch_possible(hdev))
+	if (lmp_rswitch_capable(hdev) && !(hdev->link_mode & HCI_LM_MASTER))
 		cp.role_switch = 0x01;
 	else
 		cp.role_switch = 0x00;
@@ -455,8 +448,6 @@ struct hci_conn *hci_conn_add(struct hci_dev *hdev, int type,
 
 	conn->power_save = 1;
 	conn->disc_timeout = HCI_DISCONN_TIMEOUT;
-	conn->conn_valid = true;
-	spin_lock_init(&conn->lock);
 	wake_lock_init(&conn->idle_lock, WAKE_LOCK_SUSPEND, "bt_idle");
 
 	switch (type) {
@@ -528,10 +519,6 @@ int hci_conn_del(struct hci_conn *conn)
 	struct hci_dev *hdev = conn->hdev;
 
 	BT_DBG("%s conn %p handle %d", hdev->name, conn, conn->handle);
-
-	spin_lock_bh(&conn->lock);
-	conn->conn_valid = false; /* conn data is being released */
-	spin_unlock_bh(&conn->lock);
 
 	/* Make sure no timers are running */
 	del_timer(&conn->idle_timer);
@@ -964,9 +951,6 @@ void hci_conn_enter_active_mode(struct hci_conn *conn, __u8 force_active)
 	if (test_bit(HCI_RAW, &hdev->flags))
 		return;
 
-	if (conn->type == LE_LINK)
-		return;
-
 	if (conn->mode != HCI_CM_SNIFF)
 		goto timer;
 
@@ -981,13 +965,9 @@ void hci_conn_enter_active_mode(struct hci_conn *conn, __u8 force_active)
 
 timer:
 	if (hdev->idle_timeout > 0) {
-		spin_lock_bh(&conn->lock);
-		if (conn->conn_valid) {
-			mod_timer(&conn->idle_timer,
-				jiffies + msecs_to_jiffies(hdev->idle_timeout));
-			wake_lock(&conn->idle_lock);
-		}
-		spin_unlock_bh(&conn->lock);
+		mod_timer(&conn->idle_timer,
+			jiffies + msecs_to_jiffies(hdev->idle_timeout));
+		wake_lock(&conn->idle_lock);
 	}
 }
 
@@ -1036,9 +1016,6 @@ void hci_conn_enter_sniff_mode(struct hci_conn *conn)
 	BT_DBG("conn %p mode %d", conn, conn->mode);
 
 	if (test_bit(HCI_RAW, &hdev->flags))
-		return;
-
-	if (conn->type == LE_LINK)
 		return;
 
 	if (!lmp_sniff_capable(hdev) || !lmp_sniff_capable(conn))

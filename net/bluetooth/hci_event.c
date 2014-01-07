@@ -1,6 +1,6 @@
 /*
    BlueZ - Bluetooth protocol stack for Linux
-   Copyright (c) 2000-2001, 2010-2012 The Linux Foundation. All rights reserved.
+   Copyright (c) 2000-2001, 2010-2012, Code Aurora Forum. All rights reserved.
 
    Written 2000,2001 by Maxim Krasnyansky <maxk@qualcomm.com>
 
@@ -1811,13 +1811,6 @@ static inline void hci_auth_complete_evt(struct hci_dev *hdev, struct sk_buff *s
 		if (ev->status == 0x06 && hdev->ssp_mode > 0 &&
 							conn->ssp_mode > 0) {
 			struct hci_cp_auth_requested cp;
-			struct link_key *key;
-			key = hci_find_link_key(hdev, &conn->dst);
-			if (key && key->key_type == 0x05) {
-				BT_INFO("Previous key was authenticated, "
-					"updating the auth type for outgoing connection");
-				conn->auth_type = HCI_AT_DEDICATED_BONDING_MITM;
-			}
 			hci_remove_link_key(hdev, &conn->dst);
 			cp.handle = cpu_to_le16(conn->handle);
 			/*Initiates dedicated bonding as pin or key is missing
@@ -2648,6 +2641,12 @@ static inline void hci_link_key_request_evt(struct hci_dev *hdev, struct sk_buff
 		BT_DBG("Conn pending sec level is %d, ssp is %d, key len is %d",
 			conn->pending_sec_level, conn->ssp_mode, key->pin_len);
 	}
+	if (conn && (conn->ssp_mode == 0) &&
+		(conn->pending_sec_level == BT_SECURITY_HIGH) &&
+		(key->pin_len != 16)) {
+		BT_DBG("Security is high ignoring this key");
+		goto not_found;
+	}
 
 	if (key->key_type == 0x04 && conn && conn->auth_type != 0xff &&
 						(conn->auth_type & 0x01)) {
@@ -2930,16 +2929,8 @@ static inline void hci_sync_conn_changed_evt(struct hci_dev *hdev, struct sk_buf
 static inline void hci_sniff_subrate_evt(struct hci_dev *hdev, struct sk_buff *skb)
 {
 	struct hci_ev_sniff_subrate *ev = (void *) skb->data;
-	struct hci_conn *conn =
-		hci_conn_hash_lookup_handle(hdev, __le16_to_cpu(ev->handle));
 
 	BT_DBG("%s status %d", hdev->name, ev->status);
-	if (conn && (ev->max_rx_latency > hdev->sniff_max_interval)) {
-		BT_ERR("value of rx_latency:%d", ev->max_rx_latency);
-		hci_dev_lock(hdev);
-		hci_conn_enter_active_mode(conn, 1);
-		hci_dev_unlock(hdev);
-	}
 }
 
 static inline void hci_extended_inquiry_result_evt(struct hci_dev *hdev, struct sk_buff *skb)
