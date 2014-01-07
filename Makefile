@@ -197,7 +197,7 @@ export KBUILD_BUILDHOST := $(SUBARCH)
 #ARCH             =arm
 #CROSS_COMPILE    = ../../arm-eabi-4.4.3/bin/arm-eabi-
 ARCH		?= arm
-CROSS_COMPILE	?= ../../../prebuilts/gcc/linux-x86/arm/arm-eabi-4.6/bin/arm-eabi-
+CROSS_COMPILE	?= /opt/toolchains/arm-2010q1/bin/arm-none-linux-gnueabi-
 
 # Architecture as present in compile.h
 UTS_MACHINE 	:= $(ARCH)
@@ -910,4 +910,671 @@ quiet_cmd_vmlinux-modpost = LD      $@
 define rule_vmlinux-modpost
 	:
 	+$(call cmd,vmlinux-modpost)
+	$(Q)$(MAKE) -f $(srctree)/scripts/Makefile.modpost $@
+	$(Q)echo 'cmd_$@ := $(cmd_vmlinux-modpost)' > $(dot-target).cmd
+endef
+
+# vmlinux image - including updated kernel symbols
+vmlinux: $(vmlinux-lds) $(vmlinux-init) $(vmlinux-main) vmlinux.o $(kallsyms.o) FORCE
+ifdef CONFIG_HEADERS_CHECK
+	$(Q)$(MAKE) -f $(srctree)/Makefile headers_check
+endif
+ifdef CONFIG_SAMPLES
+	$(Q)$(MAKE) $(build)=samples
+endif
+ifdef CONFIG_BUILD_DOCSRC
+	$(Q)$(MAKE) $(build)=Documentation
+endif
+	$(call vmlinux-modpost)
+	$(call if_changed_rule,vmlinux__)
+	$(Q)rm -f .old_version
+
+# build vmlinux.o first to catch section mismatch errors early
+ifdef CONFIG_KALLSYMS
+.tmp_vmlinux1: vmlinux.o
+endif
+
+modpost-init := $(filter-out init/built-in.o, $(vmlinux-init))
+vmlinux.o: $(modpost-init) $(vmlinux-main) FORCE
+	$(call if_changed_rule,vmlinux-modpost)
+
+# The actual objects are generated when descending, 
+# make sure no implicit rule kicks in
+$(sort $(vmlinux-init) $(vmlinux-main)) $(vmlinux-lds): $(vmlinux-dirs) ;
+
+# Handle descending into subdirectories listed in $(vmlinux-dirs)
+# Preset locale variables to speed up the build process. Limit locale
+# tweaks to this spot to avoid wrong language settings when running
+# make menuconfig etc.
+# Error messages still appears in the original language
+
+PHONY += $(vmlinux-dirs)
+$(vmlinux-dirs): prepare scripts
+	$(Q)$(MAKE) $(build)=$@
+
+# Store (new) KERNELRELASE string in include/config/kernel.release
+include/config/kernel.release: include/config/auto.conf FORCE
+	$(Q)rm -f $@
+	$(Q)echo "$(KERNELVERSION)$$($(CONFIG_SHELL) $(srctree)/scripts/setlocalversion $(srctree))" > $@
+
+
+# Things we need to do before we recursively start building the kernel
+# or the modules are listed in "prepare".
+# A multi level approach is used. prepareN is processed before prepareN-1.
+# archprepare is used in arch Makefiles and when processed asm symlink,
+# version.h and scripts_basic is processed / created.
+
+# Listed in dependency order
+PHONY += prepare archprepare prepare0 prepare1 prepare2 prepare3
+
+# prepare3 is used to check if we are building in a separate output directory,
+# and if so do:
+# 1) Check that make has not been executed in the kernel src $(srctree)
+prepare3: include/config/kernel.release
+ifneq ($(KBUILD_SRC),)
+	@$(kecho) '  Using $(srctree) as source for kernel'
+	$(Q)if [ -f $(srctree)/.config -o -d $(srctree)/include/config ]; then \
+		echo "  $(srctree) is not clean, please run 'make mrproper'";\
+		echo "  in the '$(srctree)' directory.";\
+		/bin/false; \
+	fi;
+endif
+
+# prepare2 creates a makefile if using a separate output directory
+prepare2: prepare3 outputmakefile asm-generic
+
+prepare1: prepare2 include/linux/version.h include/generated/utsrelease.h \
+                   include/config/auto.conf
+	$(cmd_crmodverdir)
+
+archprepare: archheaders archscripts prepare1 scripts_basic
+
+prepare0: archprepare FORCE
+	$(Q)$(MAKE) $(build)=.
+
+# All the preparing..
+prepare: prepare0
+
+# Generate some files
+# ---------------------------------------------------------------------------
+
+# KERNELRELEASE can change from a few different places, meaning version.h
+# needs to be updated, so this check is forced on all builds
+
+uts_len := 64
+define filechk_utsrelease.h
+	if [ `echo -n "$(KERNELRELEASE)" | wc -c ` -gt $(uts_len) ]; then \
+	  echo '"$(KERNELRELEASE)" exceeds $(uts_len) characters' >&2;    \
+	  exit 1;                                                         \
+	fi;                                                               \
+	(echo \#define UTS_RELEASE \"$(KERNELRELEASE)\";)
+endef
+
+define filechk_version.h
+	(echo \#define LINUX_VERSION_CODE $(shell                             \
+	expr $(VERSION) \* 65536 + 0$(PATCHLEVEL) \* 256 + 0$(SUBLEVEL));    \
+	echo '#define KERNEL_VERSION(a,b,c) (((a) << 16) + ((b) << 8) + (c))';)
+endef
+
+include/linux/version.h: $(srctree)/Makefile FORCE
+	$(call filechk,version.h)
+
+include/generated/utsrelease.h: include/config/kernel.release FORCE
+	$(call filechk,utsrelease.h)
+
+PHONY += headerdep
+headerdep:
+	$(Q)find $(srctree)/include/ -name '*.h' | xargs --max-args 1 \
+	$(srctree)/scripts/headerdep.pl -I$(srctree)/include
+
+# ---------------------------------------------------------------------------
+
+PHONY += depend dep
+depend dep:
+	@echo '*** Warning: make $@ is unnecessary now.'
+
+# ---------------------------------------------------------------------------
+# Firmware install
+INSTALL_FW_PATH=$(INSTALL_MOD_PATH)/lib/firmware
+export INSTALL_FW_PATH
+
+PHONY += firmware_install
+firmware_install: FORCE
+	@mkdir -p $(objtree)/firmware
+	$(Q)$(MAKE) -f $(srctree)/scripts/Makefile.fwinst obj=firmware __fw_install
+
+# ---------------------------------------------------------------------------
+# Kernel headers
+
+#Default location for installed headers
+export INSTALL_HDR_PATH = $(objtree)/usr
+
+hdr-inst := -rR -f $(srctree)/scripts/Makefile.headersinst obj
+
+# If we do an all arch process set dst to asm-$(hdr-arch)
+hdr-dst = $(if $(KBUILD_HEADERS), dst=include/asm-$(hdr-arch), dst=include/asm)
+
+PHONY += archheaders
+archheaders:
+
+PHONY += archscripts
+archscripts:
+
+PHONY += __headers
+__headers: include/linux/version.h scripts_basic asm-generic archheaders archscripts FORCE
+	$(Q)$(MAKE) $(build)=scripts build_unifdef
+
+PHONY += headers_install_all
+headers_install_all:
+	$(Q)$(CONFIG_SHELL) $(srctree)/scripts/headers.sh install
+
+PHONY += headers_install
+headers_install: __headers
+	$(if $(wildcard $(srctree)/arch/$(hdr-arch)/include/asm/Kbuild),, \
+	$(error Headers not exportable for the $(SRCARCH) architecture))
+	$(Q)$(MAKE) $(hdr-inst)=include
+	$(Q)$(MAKE) $(hdr-inst)=arch/$(hdr-arch)/include/asm $(hdr-dst)
+
+PHONY += headers_check_all
+headers_check_all: headers_install_all
+	$(Q)$(CONFIG_SHELL) $(srctree)/scripts/headers.sh check
+
+PHONY += headers_check
+headers_check: headers_install
+	$(Q)$(MAKE) $(hdr-inst)=include HDRCHECK=1
+	$(Q)$(MAKE) $(hdr-inst)=arch/$(hdr-arch)/include/asm $(hdr-dst) HDRCHECK=1
+
+# ---------------------------------------------------------------------------
+# Modules
+
+ifdef CONFIG_MODULES
+
+# By default, build modules as well
+
+all: modules
+
+#	Build modules
+#
+#	A module can be listed more than once in obj-m resulting in
+#	duplicate lines in modules.order files.  Those are removed
+#	using awk while concatenating to the final file.
+
+PHONY += modules
+modules: $(vmlinux-dirs) $(if $(KBUILD_BUILTIN),vmlinux) modules.builtin
+	$(Q)$(AWK) '!x[$$0]++' $(vmlinux-dirs:%=$(objtree)/%/modules.order) > $(objtree)/modules.order
+	@$(kecho) '  Building modules, stage 2.';
 	$(Q)$(MAKE) -f $(srctree)/scripts/Makefile.modpost
+	$(Q)$(MAKE) -f $(srctree)/scripts/Makefile.fwinst obj=firmware __fw_modbuild
+
+modules.builtin: $(vmlinux-dirs:%=%/modules.builtin)
+	$(Q)$(AWK) '!x[$$0]++' $^ > $(objtree)/modules.builtin
+
+%/modules.builtin: include/config/auto.conf
+	$(Q)$(MAKE) $(modbuiltin)=$*
+
+
+# Target to prepare building external modules
+PHONY += modules_prepare
+modules_prepare: prepare scripts
+
+# Target to install modules
+PHONY += modules_install
+modules_install: _modinst_ _modinst_post
+
+PHONY += _modinst_
+_modinst_:
+	@rm -rf $(MODLIB)/kernel
+	@rm -f $(MODLIB)/source
+	@mkdir -p $(MODLIB)/kernel
+	@ln -s $(srctree) $(MODLIB)/source
+	@if [ ! $(objtree) -ef  $(MODLIB)/build ]; then \
+		rm -f $(MODLIB)/build ; \
+		ln -s $(objtree) $(MODLIB)/build ; \
+	fi
+	@cp -f $(objtree)/modules.order $(MODLIB)/
+	@cp -f $(objtree)/modules.builtin $(MODLIB)/
+	$(Q)$(MAKE) -f $(srctree)/scripts/Makefile.modinst
+
+# This depmod is only for convenience to give the initial
+# boot a modules.dep even before / is mounted read-write.  However the
+# boot script depmod is the master version.
+PHONY += _modinst_post
+_modinst_post: _modinst_
+	$(Q)$(MAKE) -f $(srctree)/scripts/Makefile.fwinst obj=firmware __fw_modinst
+	$(call cmd,depmod)
+
+else # CONFIG_MODULES
+
+# Modules not configured
+# ---------------------------------------------------------------------------
+
+modules modules_install: FORCE
+	@echo
+	@echo "The present kernel configuration has modules disabled."
+	@echo "Type 'make config' and enable loadable module support."
+	@echo "Then build a kernel with module support enabled."
+	@echo
+	@exit 1
+
+endif # CONFIG_MODULES
+
+###
+# Cleaning is done on three levels.
+# make clean     Delete most generated files
+#                Leave enough to build external modules
+# make mrproper  Delete the current configuration, and all generated files
+# make distclean Remove editor backup files, patch leftover files and the like
+
+# Directories & files removed with 'make clean'
+CLEAN_DIRS  += $(MODVERDIR)
+CLEAN_FILES +=	vmlinux System.map \
+                .tmp_kallsyms* .tmp_version .tmp_vmlinux* .tmp_System.map
+
+# Directories & files removed with 'make mrproper'
+MRPROPER_DIRS  += include/config usr/include include/generated          \
+                  arch/*/include/generated
+MRPROPER_FILES += .config .config.old .version .old_version             \
+                  include/linux/version.h                               \
+		  Module.symvers tags TAGS cscope* GPATH GTAGS GRTAGS GSYMS
+
+# clean - Delete most, but leave enough to build external modules
+#
+clean: rm-dirs  := $(CLEAN_DIRS)
+clean: rm-files := $(CLEAN_FILES)
+clean-dirs      := $(addprefix _clean_, . $(vmlinux-alldirs) Documentation samples)
+
+PHONY += $(clean-dirs) clean archclean
+$(clean-dirs):
+	$(Q)$(MAKE) $(clean)=$(patsubst _clean_%,%,$@)
+
+clean: archclean
+
+# mrproper - Delete all generated files, including .config
+#
+mrproper: rm-dirs  := $(wildcard $(MRPROPER_DIRS))
+mrproper: rm-files := $(wildcard $(MRPROPER_FILES))
+mrproper-dirs      := $(addprefix _mrproper_,Documentation/DocBook scripts)
+
+PHONY += $(mrproper-dirs) mrproper archmrproper
+$(mrproper-dirs):
+	$(Q)$(MAKE) $(clean)=$(patsubst _mrproper_%,%,$@)
+
+mrproper: clean archmrproper $(mrproper-dirs)
+	$(call cmd,rmdirs)
+	$(call cmd,rmfiles)
+
+# distclean
+#
+PHONY += distclean
+
+distclean: mrproper
+	@find $(srctree) $(RCS_FIND_IGNORE) \
+		\( -name '*.orig' -o -name '*.rej' -o -name '*~' \
+		-o -name '*.bak' -o -name '#*#' -o -name '.*.orig' \
+		-o -name '.*.rej' \
+		-o -name '*%' -o -name '.*.cmd' -o -name 'core' \) \
+		-type f -print | xargs rm -f
+
+
+# Packaging of the kernel to various formats
+# ---------------------------------------------------------------------------
+# rpm target kept for backward compatibility
+package-dir	:= $(srctree)/scripts/package
+
+%src-pkg: FORCE
+	$(Q)$(MAKE) $(build)=$(package-dir) $@
+%pkg: include/config/kernel.release FORCE
+	$(Q)$(MAKE) $(build)=$(package-dir) $@
+rpm: include/config/kernel.release FORCE
+	$(Q)$(MAKE) $(build)=$(package-dir) $@
+
+
+# Brief documentation of the typical targets used
+# ---------------------------------------------------------------------------
+
+boards := $(wildcard $(srctree)/arch/$(SRCARCH)/configs/*_defconfig)
+boards := $(notdir $(boards))
+board-dirs := $(dir $(wildcard $(srctree)/arch/$(SRCARCH)/configs/*/*_defconfig))
+board-dirs := $(sort $(notdir $(board-dirs:/=)))
+
+help:
+	@echo  'Cleaning targets:'
+	@echo  '  clean		  - Remove most generated files but keep the config and'
+	@echo  '                    enough build support to build external modules'
+	@echo  '  mrproper	  - Remove all generated files + config + various backup files'
+	@echo  '  distclean	  - mrproper + remove editor backup and patch files'
+	@echo  ''
+	@echo  'Configuration targets:'
+	@$(MAKE) -f $(srctree)/scripts/kconfig/Makefile help
+	@echo  ''
+	@echo  'Other generic targets:'
+	@echo  '  all		  - Build all targets marked with [*]'
+	@echo  '* vmlinux	  - Build the bare kernel'
+	@echo  '* modules	  - Build all modules'
+	@echo  '  modules_install - Install all modules to INSTALL_MOD_PATH (default: /)'
+	@echo  '  firmware_install- Install all firmware to INSTALL_FW_PATH'
+	@echo  '                    (default: $$(INSTALL_MOD_PATH)/lib/firmware)'
+	@echo  '  dir/            - Build all files in dir and below'
+	@echo  '  dir/file.[oisS] - Build specified target only'
+	@echo  '  dir/file.lst    - Build specified mixed source/assembly target only'
+	@echo  '                    (requires a recent binutils and recent build (System.map))'
+	@echo  '  dir/file.ko     - Build module including final link'
+	@echo  '  modules_prepare - Set up for building external modules'
+	@echo  '  tags/TAGS	  - Generate tags file for editors'
+	@echo  '  cscope	  - Generate cscope index'
+	@echo  '  gtags           - Generate GNU GLOBAL index'
+	@echo  '  kernelrelease	  - Output the release version string'
+	@echo  '  kernelversion	  - Output the version stored in Makefile'
+	@echo  '  headers_install - Install sanitised kernel headers to INSTALL_HDR_PATH'; \
+	 echo  '                    (default: $(INSTALL_HDR_PATH))'; \
+	 echo  ''
+	@echo  'Static analysers'
+	@echo  '  checkstack      - Generate a list of stack hogs'
+	@echo  '  namespacecheck  - Name space analysis on compiled kernel'
+	@echo  '  versioncheck    - Sanity check on version.h usage'
+	@echo  '  includecheck    - Check for duplicate included header files'
+	@echo  '  export_report   - List the usages of all exported symbols'
+	@echo  '  headers_check   - Sanity check on exported headers'
+	@echo  '  headerdep       - Detect inclusion cycles in headers'
+	@$(MAKE) -f $(srctree)/scripts/Makefile.help checker-help
+	@echo  ''
+	@echo  'Kernel packaging:'
+	@$(MAKE) $(build)=$(package-dir) help
+	@echo  ''
+	@echo  'Documentation targets:'
+	@$(MAKE) -f $(srctree)/Documentation/DocBook/Makefile dochelp
+	@echo  ''
+	@echo  'Architecture specific targets ($(SRCARCH)):'
+	@$(if $(archhelp),$(archhelp),\
+		echo '  No architecture specific help defined for $(SRCARCH)')
+	@echo  ''
+	@$(if $(boards), \
+		$(foreach b, $(boards), \
+		printf "  %-24s - Build for %s\\n" $(b) $(subst _defconfig,,$(b));) \
+		echo '')
+	@$(if $(board-dirs), \
+		$(foreach b, $(board-dirs), \
+		printf "  %-16s - Show %s-specific targets\\n" help-$(b) $(b);) \
+		printf "  %-16s - Show all of the above\\n" help-boards; \
+		echo '')
+
+	@echo  '  make V=0|1 [targets] 0 => quiet build (default), 1 => verbose build'
+	@echo  '  make V=2   [targets] 2 => give reason for rebuild of target'
+	@echo  '  make O=dir [targets] Locate all output files in "dir", including .config'
+	@echo  '  make C=1   [targets] Check all c source with $$CHECK (sparse by default)'
+	@echo  '  make C=2   [targets] Force check of all c source with $$CHECK'
+	@echo  '  make RECORDMCOUNT_WARN=1 [targets] Warn about ignored mcount sections'
+	@echo  '  make W=n   [targets] Enable extra gcc checks, n=1,2,3 where'
+	@echo  '		1: warnings which may be relevant and do not occur too often'
+	@echo  '		2: warnings which occur quite often but may still be relevant'
+	@echo  '		3: more obscure warnings, can most likely be ignored'
+	@echo  '		Multiple levels can be combined with W=12 or W=123'
+	@echo  ''
+	@echo  'Execute "make" or "make all" to build all targets marked with [*] '
+	@echo  'For further info see the ./README file'
+
+
+help-board-dirs := $(addprefix help-,$(board-dirs))
+
+help-boards: $(help-board-dirs)
+
+boards-per-dir = $(notdir $(wildcard $(srctree)/arch/$(SRCARCH)/configs/$*/*_defconfig))
+
+$(help-board-dirs): help-%:
+	@echo  'Architecture specific targets ($(SRCARCH) $*):'
+	@$(if $(boards-per-dir), \
+		$(foreach b, $(boards-per-dir), \
+		printf "  %-24s - Build for %s\\n" $*/$(b) $(subst _defconfig,,$(b));) \
+		echo '')
+
+
+# Documentation targets
+# ---------------------------------------------------------------------------
+%docs: scripts_basic FORCE
+	$(Q)$(MAKE) $(build)=scripts build_docproc
+	$(Q)$(MAKE) $(build)=Documentation/DocBook $@
+
+else # KBUILD_EXTMOD
+
+###
+# External module support.
+# When building external modules the kernel used as basis is considered
+# read-only, and no consistency checks are made and the make
+# system is not used on the basis kernel. If updates are required
+# in the basis kernel ordinary make commands (without M=...) must
+# be used.
+#
+# The following are the only valid targets when building external
+# modules.
+# make M=dir clean     Delete all automatically generated files
+# make M=dir modules   Make all modules in specified dir
+# make M=dir	       Same as 'make M=dir modules'
+# make M=dir modules_install
+#                      Install the modules built in the module directory
+#                      Assumes install directory is already created
+
+# We are always building modules
+KBUILD_MODULES := 1
+PHONY += crmodverdir
+crmodverdir:
+	$(cmd_crmodverdir)
+
+PHONY += $(objtree)/Module.symvers
+$(objtree)/Module.symvers:
+	@test -e $(objtree)/Module.symvers || ( \
+	echo; \
+	echo "  WARNING: Symbol version dump $(objtree)/Module.symvers"; \
+	echo "           is missing; modules will have no dependencies and modversions."; \
+	echo )
+
+module-dirs := $(addprefix _module_,$(KBUILD_EXTMOD))
+PHONY += $(module-dirs) modules
+$(module-dirs): crmodverdir $(objtree)/Module.symvers
+	$(Q)$(MAKE) $(build)=$(patsubst _module_%,%,$@)
+
+modules: $(module-dirs)
+	@$(kecho) '  Building modules, stage 2.';
+	$(Q)$(MAKE) -f $(srctree)/scripts/Makefile.modpost
+
+PHONY += modules_install
+modules_install: _emodinst_ _emodinst_post
+
+install-dir := $(if $(INSTALL_MOD_DIR),$(INSTALL_MOD_DIR),extra)
+PHONY += _emodinst_
+_emodinst_:
+	$(Q)mkdir -p $(MODLIB)/$(install-dir)
+	$(Q)$(MAKE) -f $(srctree)/scripts/Makefile.modinst
+
+PHONY += _emodinst_post
+_emodinst_post: _emodinst_
+	$(call cmd,depmod)
+
+clean-dirs := $(addprefix _clean_,$(KBUILD_EXTMOD))
+
+PHONY += $(clean-dirs) clean
+$(clean-dirs):
+	$(Q)$(MAKE) $(clean)=$(patsubst _clean_%,%,$@)
+
+clean:	rm-dirs := $(MODVERDIR)
+clean: rm-files := $(KBUILD_EXTMOD)/Module.symvers
+
+help:
+	@echo  '  Building external modules.'
+	@echo  '  Syntax: make -C path/to/kernel/src M=$$PWD target'
+	@echo  ''
+	@echo  '  modules         - default target, build the module(s)'
+	@echo  '  modules_install - install the module'
+	@echo  '  clean           - remove generated files in module directory only'
+	@echo  ''
+
+# Dummies...
+PHONY += prepare scripts
+prepare: ;
+scripts: ;
+endif # KBUILD_EXTMOD
+
+clean: $(clean-dirs)
+	$(call cmd,rmdirs)
+	$(call cmd,rmfiles)
+	@find $(if $(KBUILD_EXTMOD), $(KBUILD_EXTMOD), .) $(RCS_FIND_IGNORE) \
+		\( -name '*.[oas]' -o -name '*.ko' -o -name '.*.cmd' \
+		-o -name '.*.d' -o -name '.*.tmp' -o -name '*.mod.c' \
+		-o -name '*.symtypes' -o -name 'modules.order' \
+		-o -name modules.builtin -o -name '.tmp_*.o.*' \
+		-o -name '*.gcno' \) -type f -print | xargs rm -f
+
+# Generate tags for editors
+# ---------------------------------------------------------------------------
+quiet_cmd_tags = GEN     $@
+      cmd_tags = $(CONFIG_SHELL) $(srctree)/scripts/tags.sh $@
+
+tags TAGS cscope gtags: FORCE
+	$(call cmd,tags)
+
+# Scripts to check various things for consistency
+# ---------------------------------------------------------------------------
+
+PHONY += includecheck versioncheck coccicheck namespacecheck export_report
+
+includecheck:
+	find $(srctree)/* $(RCS_FIND_IGNORE) \
+		-name '*.[hcS]' -type f -print | sort \
+		| xargs $(PERL) -w $(srctree)/scripts/checkincludes.pl
+
+versioncheck:
+	find $(srctree)/* $(RCS_FIND_IGNORE) \
+		-name '*.[hcS]' -type f -print | sort \
+		| xargs $(PERL) -w $(srctree)/scripts/checkversion.pl
+
+coccicheck:
+	$(Q)$(CONFIG_SHELL) $(srctree)/scripts/$@
+
+namespacecheck:
+	$(PERL) $(srctree)/scripts/namespace.pl
+
+export_report:
+	$(PERL) $(srctree)/scripts/export_report.pl
+
+endif #ifeq ($(config-targets),1)
+endif #ifeq ($(mixed-targets),1)
+
+PHONY += checkstack kernelrelease kernelversion
+
+# UML needs a little special treatment here.  It wants to use the host
+# toolchain, so needs $(SUBARCH) passed to checkstack.pl.  Everyone
+# else wants $(ARCH), including people doing cross-builds, which means
+# that $(SUBARCH) doesn't work here.
+ifeq ($(ARCH), um)
+CHECKSTACK_ARCH := $(SUBARCH)
+else
+CHECKSTACK_ARCH := $(ARCH)
+endif
+checkstack:
+	$(OBJDUMP) -d vmlinux $$(find . -name '*.ko') | \
+	$(PERL) $(src)/scripts/checkstack.pl $(CHECKSTACK_ARCH)
+
+kernelrelease:
+	@echo "$(KERNELVERSION)$$($(CONFIG_SHELL) $(srctree)/scripts/setlocalversion $(srctree))"
+
+kernelversion:
+	@echo $(KERNELVERSION)
+
+# Single targets
+# ---------------------------------------------------------------------------
+# Single targets are compatible with:
+# - build with mixed source and output
+# - build with separate output dir 'make O=...'
+# - external modules
+#
+#  target-dir => where to store outputfile
+#  build-dir  => directory in kernel source tree to use
+
+ifeq ($(KBUILD_EXTMOD),)
+        build-dir  = $(patsubst %/,%,$(dir $@))
+        target-dir = $(dir $@)
+else
+        zap-slash=$(filter-out .,$(patsubst %/,%,$(dir $@)))
+        build-dir  = $(KBUILD_EXTMOD)$(if $(zap-slash),/$(zap-slash))
+        target-dir = $(if $(KBUILD_EXTMOD),$(dir $<),$(dir $@))
+endif
+
+%.s: %.c prepare scripts FORCE
+	$(Q)$(MAKE) $(build)=$(build-dir) $(target-dir)$(notdir $@)
+%.i: %.c prepare scripts FORCE
+	$(Q)$(MAKE) $(build)=$(build-dir) $(target-dir)$(notdir $@)
+%.o: %.c prepare scripts FORCE
+	$(Q)$(MAKE) $(build)=$(build-dir) $(target-dir)$(notdir $@)
+%.lst: %.c prepare scripts FORCE
+	$(Q)$(MAKE) $(build)=$(build-dir) $(target-dir)$(notdir $@)
+%.s: %.S prepare scripts FORCE
+	$(Q)$(MAKE) $(build)=$(build-dir) $(target-dir)$(notdir $@)
+%.o: %.S prepare scripts FORCE
+	$(Q)$(MAKE) $(build)=$(build-dir) $(target-dir)$(notdir $@)
+%.symtypes: %.c prepare scripts FORCE
+	$(Q)$(MAKE) $(build)=$(build-dir) $(target-dir)$(notdir $@)
+
+# Modules
+/: prepare scripts FORCE
+	$(cmd_crmodverdir)
+	$(Q)$(MAKE) KBUILD_MODULES=$(if $(CONFIG_MODULES),1) \
+	$(build)=$(build-dir)
+%/: prepare scripts FORCE
+	$(cmd_crmodverdir)
+	$(Q)$(MAKE) KBUILD_MODULES=$(if $(CONFIG_MODULES),1) \
+	$(build)=$(build-dir)
+%.ko: prepare scripts FORCE
+	$(cmd_crmodverdir)
+	$(Q)$(MAKE) KBUILD_MODULES=$(if $(CONFIG_MODULES),1)   \
+	$(build)=$(build-dir) $(@:.ko=.o)
+	$(Q)$(MAKE) -f $(srctree)/scripts/Makefile.modpost
+
+# FIXME Should go into a make.lib or something 
+# ===========================================================================
+
+quiet_cmd_rmdirs = $(if $(wildcard $(rm-dirs)),CLEAN   $(wildcard $(rm-dirs)))
+      cmd_rmdirs = rm -rf $(rm-dirs)
+
+quiet_cmd_rmfiles = $(if $(wildcard $(rm-files)),CLEAN   $(wildcard $(rm-files)))
+      cmd_rmfiles = rm -f $(rm-files)
+
+# Run depmod only if we have System.map and depmod is executable
+quiet_cmd_depmod = DEPMOD  $(KERNELRELEASE)
+      cmd_depmod = $(CONFIG_SHELL) $(srctree)/scripts/depmod.sh $(DEPMOD) \
+                   $(KERNELRELEASE)
+
+# Create temporary dir for module support files
+# clean it up only when building all modules
+cmd_crmodverdir = $(Q)mkdir -p $(MODVERDIR) \
+                  $(if $(KBUILD_MODULES),; rm -f $(MODVERDIR)/*)
+
+a_flags = -Wp,-MD,$(depfile) $(KBUILD_AFLAGS) $(AFLAGS_KERNEL) \
+	  $(KBUILD_AFLAGS_KERNEL)                              \
+	  $(NOSTDINC_FLAGS) $(LINUXINCLUDE) $(KBUILD_CPPFLAGS) \
+	  $(modkern_aflags) $(EXTRA_AFLAGS) $(AFLAGS_$(basetarget).o)
+
+quiet_cmd_as_o_S = AS      $@
+cmd_as_o_S       = $(CC) $(a_flags) -c -o $@ $<
+
+# read all saved command lines
+
+targets := $(wildcard $(sort $(targets)))
+cmd_files := $(wildcard .*.cmd $(foreach f,$(targets),$(dir $(f)).$(notdir $(f)).cmd))
+
+ifneq ($(cmd_files),)
+  $(cmd_files): ;	# Do not try to update included dependency files
+  include $(cmd_files)
+endif
+
+# Shorthand for $(Q)$(MAKE) -f scripts/Makefile.clean obj=dir
+# Usage:
+# $(Q)$(MAKE) $(clean)=dir
+clean := -f $(if $(KBUILD_SRC),$(srctree)/)scripts/Makefile.clean obj
+
+endif	# skip-makefile
+
+PHONY += FORCE
+FORCE:
+
+# Declare the contents of the .PHONY variable as phony.  We keep that
+# information in a variable so we can use it in if_changed and friends.
+.PHONY: $(PHONY)
